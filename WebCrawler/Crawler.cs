@@ -17,7 +17,7 @@ namespace WebCrawler
         public event EventHandler<DocumentEventArgs> DocumentParsed;
         public event EventHandler<DocumentEventArgs> DocumentUpdated;
 
-        private bool IsSameHost(string a, string b)
+        private static bool IsSameHost(string a, string b)
         {
             return new Url(a).Host == new Url(b).Host;
         }
@@ -50,7 +50,7 @@ namespace WebCrawler
                 }
 
                 // Console.WriteLine(toBeProcessed.Url);
-                var doc = await GetAsync(toBeProcessed.Url, ct);
+                var doc = await GetAsync(toBeProcessed.Url, ct).ConfigureAwait(false);
 
                 if (toBeProcessed.Document != null)
                 {
@@ -69,11 +69,11 @@ namespace WebCrawler
             var doc = new Document();
             doc.CrawledOn = DateTime.UtcNow;
             doc.OriginalUrl = address;
-
+            
             var config = Configuration.Default
                 .WithDefaultLoader()
                 .WithLocaleBasedEncoding();
-
+            
             var browsingContext = BrowsingContext.New(config);
             browsingContext.Requested += (sender, e) =>
             {
@@ -86,8 +86,8 @@ namespace WebCrawler
                 doc.StatusCode = requestEvent.Response.StatusCode;
                 doc.Headers = Clone(requestEvent.Response.Headers);
             };
-
-            var document = await browsingContext.OpenAsync(new Url(address), ct);
+            
+            var document = await browsingContext.OpenAsync(new Url(address), ct).ConfigureAwait(false);
             if (doc.Url == null)
             {
                 doc.Url = address;
@@ -98,18 +98,14 @@ namespace WebCrawler
             foreach (var node in document.All)
             {
                 // TODO sourceset
-                // TODO css background, url(...)
-                // TODO HtmlAreaElement
+                // TODO css background, url(...) + Inline style
                 if (node is IHtmlAnchorElement anchorElement)
                 {
                     Enqueue(doc, anchorElement.Href, node);
                 }
                 else if (node is IHtmlScriptElement scriptElement)
                 {
-                    if (string.IsNullOrEmpty(scriptElement.Type) ||
-                        string.Equals("text/javascript", scriptElement.Type) ||
-                        string.Equals("application/ecmascript", scriptElement.Type) ||
-                        string.Equals("application/javascript", scriptElement.Type))
+                    if (string.IsNullOrEmpty(scriptElement.Type) || IsJavaScript(scriptElement.Type))
                     {
                         if (!string.IsNullOrEmpty(scriptElement.Source))
                         {
@@ -151,6 +147,10 @@ namespace WebCrawler
                 {
                     Enqueue(doc, frameElement.Source, node);
                 }
+                else if (node is IHtmlAreaElement areaElement)
+                {
+                    Enqueue(doc, areaElement.Href, node);
+                }
             }
 
             return doc;
@@ -164,16 +164,16 @@ namespace WebCrawler
                     url.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase) ||
                     url.StartsWith("tel:", StringComparison.OrdinalIgnoreCase))
                     return;
-                
+
                 // Remove
                 var parsedUrl = new Url(url);
-                parsedUrl.Fragment= null;
+                parsedUrl.Fragment = null;
 
                 _toProcess.Enqueue(new DiscoveredUrl { Url = parsedUrl.Href, Document = document, Excerpt = GetExcerpt(node) });
             }
         }
 
-        private string GetExcerpt(IElement node)
+        private static string GetExcerpt(IElement node)
         {
             return node.OuterHtml;
         }
@@ -188,7 +188,7 @@ namespace WebCrawler
             DocumentUpdated?.Invoke(this, new DocumentEventArgs(document));
         }
 
-        private IDictionary<string, string> Clone(IDictionary<string, string> dict)
+        private static IDictionary<string, string> Clone(IDictionary<string, string> dict)
         {
             var clone = new Dictionary<string, string>();
             foreach (var kvp in dict)
@@ -197,6 +197,37 @@ namespace WebCrawler
             }
 
             return clone;
+        }
+
+        private static bool IsJavaScript(string type)
+        {
+            string[] javaScriptMimeTypes =
+            {
+                "application/ecmascript",
+                "application/javascript",
+                "application/x-ecmascript",
+                "application/x-javascript",
+                "text/ecmascript",
+                "text/javascript",
+                "text/javascript1.0",
+                "text/javascript1.1",
+                "text/javascript1.2",
+                "text/javascript1.3",
+                "text/javascript1.4",
+                "text/javascript1.5",
+                "text/jscript",
+                "text/livescript",
+                "text/x-ecmascript",
+                "text/x-javascript"
+            };
+
+            foreach (var jsType in javaScriptMimeTypes)
+            {
+                if (string.Equals(type, jsType, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
         }
     }
 }
