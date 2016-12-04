@@ -13,7 +13,7 @@ namespace WebCrawler
 {
     public class Crawler
     {
-        private ConcurrentQueue<DiscoveredUrl> _toProcess = new ConcurrentQueue<DiscoveredUrl>();
+        private readonly ConcurrentQueue<DiscoveredUrl> _toProcess = new ConcurrentQueue<DiscoveredUrl>();
         public event EventHandler<DocumentEventArgs> DocumentParsed;
         public event EventHandler<DocumentEventArgs> DocumentUpdated;
 
@@ -99,25 +99,57 @@ namespace WebCrawler
             {
                 // TODO sourceset
                 // TODO css background, url(...)
-                if (node is IHtmlAnchorElement anchor)
+                // TODO HtmlAreaElement
+                if (node is IHtmlAnchorElement anchorElement)
                 {
-                    Enqueue(doc, anchor.Href, node);
+                    Enqueue(doc, anchorElement.Href, node);
                 }
-                else if (node is IHtmlScriptElement script)
+                else if (node is IHtmlScriptElement scriptElement)
                 {
-                    Enqueue(doc, script.Source, node);
+                    if (string.IsNullOrEmpty(scriptElement.Type) ||
+                        string.Equals("text/javascript", scriptElement.Type) ||
+                        string.Equals("application/ecmascript", scriptElement.Type) ||
+                        string.Equals("application/javascript", scriptElement.Type))
+                    {
+                        if (!string.IsNullOrEmpty(scriptElement.Source))
+                        {
+                            var href = new Url(scriptElement.BaseUrl, scriptElement.Source).Href;
+                            Enqueue(doc, href, node);
+                        }
+                    }
                 }
-                else if (node is IHtmlLinkElement link)
+                else if (node is IHtmlLinkElement linkElement)
                 {
-                    Enqueue(doc, link.Href, node);
+                    Enqueue(doc, linkElement.Href, node);
                 }
-                else if (node is IHtmlImageElement image)
+                else if (node is IHtmlImageElement imageElement)
                 {
-                    Enqueue(doc, image.Source, node);
+                    Enqueue(doc, imageElement.Source, node);
                 }
-                else if (node is IHtmlSourceElement source)
+                else if (node is IHtmlSourceElement sourceElement)
                 {
-                    Enqueue(doc, source.Source, node);
+                    Enqueue(doc, sourceElement.Source, node);
+                }
+                else if (node is IHtmlTrackElement trackElement)
+                {
+                    Enqueue(doc, trackElement.Source, node);
+                }
+                else if (node is IHtmlObjectElement objectElement)
+                {
+                    Enqueue(doc, objectElement.Source, node);
+                }
+                else if (node is IHtmlAudioElement audioElement)
+                {
+                    Enqueue(doc, audioElement.Source, node);
+                }
+                else if (node is IHtmlVideoElement videoElement)
+                {
+                    Enqueue(doc, videoElement.Source, node);
+                    Enqueue(doc, videoElement.Poster, node);
+                }
+                else if (node is IHtmlInlineFrameElement frameElement)
+                {
+                    Enqueue(doc, frameElement.Source, node);
                 }
             }
 
@@ -128,7 +160,16 @@ namespace WebCrawler
         {
             if (!string.IsNullOrEmpty(url))
             {
-                _toProcess.Enqueue(new DiscoveredUrl { Url = url, Document = document, Excerpt = GetExcerpt(node) });
+                if (url.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) ||
+                    url.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase) ||
+                    url.StartsWith("tel:", StringComparison.OrdinalIgnoreCase))
+                    return;
+                
+                // Remove
+                var parsedUrl = new Url(url);
+                parsedUrl.Fragment= null;
+
+                _toProcess.Enqueue(new DiscoveredUrl { Url = parsedUrl.Href, Document = document, Excerpt = GetExcerpt(node) });
             }
         }
 
