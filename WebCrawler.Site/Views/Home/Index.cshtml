@@ -100,6 +100,9 @@
         var btnStart = document.getElementById("BtnCrawlStart");
         var btnStop = document.getElementById("BtnCrawlStop");
         var container = document.getElementById("DocumentContainer");
+        var urlInput = document.getElementById("Url");
+
+        urlInput.value = localStorage.getItem("lasturl");
 
         btnStart.addEventListener("click", function (e) {
             e.preventDefault();
@@ -107,9 +110,12 @@
             btnStart.disabled = true;
             btnStop.disabled = false;
 
+            var url = urlInput.value;
+            localStorage.setItem("lasturl", url);
+
             // Start web listener
             crawler = new WebCrawler({
-                url: document.getElementById("Url").value,
+                url: url,
                 documentTemplate: compiledTemplate,
                 container: container,
                 onFinished: onFinished
