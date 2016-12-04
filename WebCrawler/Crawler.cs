@@ -94,7 +94,7 @@ namespace WebCrawler
             doc.Url = address;
             try
             {
-                using (var response = await _client.GetAsync(address, ct).ConfigureAwait(false))
+                using (var response = await _client.GetAsync(address, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false))
                 {
                     doc.StatusCode = response.StatusCode;
                     doc.Headers = Combine(Clone(response.Headers), Clone(response.Content?.Headers));
