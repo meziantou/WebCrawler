@@ -1,0 +1,24 @@
+﻿.document{
+    margin-bottom: 5px;
+}
+
+.status {
+    border-radius: 5px;
+    padding: 0 5px;
+}
+
+.status-ok {
+    background-color: limegreen;
+}
+
+.status-redirect {
+    background-color: orange;
+}
+
+.status-error {
+    background-color: orangered;
+}
+
+:target {
+    background-color: antiquewhite;
+}

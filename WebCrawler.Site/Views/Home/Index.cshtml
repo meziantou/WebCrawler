@@ -1,0 +1,122 @@
+﻿<h1>Web crawler</h1>
+
+<form>
+    <div>
+        <label for="Url">Url</label>
+        <input id="Url" type="url" value="https://www.meziantou.net" />
+    </div>
+
+    <button id="BtnCrawlStart">Start</button>
+    <button id="BtnCrawlStop">Stop</button>
+</form>
+
+<div id="DocumentContainer">
+
+</div>
+
+<script id="template" type="text/x-handlebars-template">
+    <div class="document" id="Doc-{{Id}}" data-document-id="{{Id}}">
+        <details>
+            <summary class="document-summary">
+                <span class="status status-{{statusCodeClass StatusCode}}">{{StatusCode}}</span>
+                <span><a target="_blank" href="{{OriginalUrl}}">{{OriginalUrl}}</a></span>
+            </summary>
+
+            <div class="details">
+                <div>Crawled on '{{CrawledOn}}'</div>
+
+                <div class="headers">
+                    <details>
+                        <summary>Headers ({{objectLength Headers}})</summary>
+                        <pre>{{objectPre Headers}}</pre>
+                    </details>
+                </div>
+
+                <div class="referenced-by">
+                    <details>
+                        <summary>References ({{ReferencedBy.length}})</summary>
+                        <ul>
+                            {{#each ReferencedBy}}
+                            <li>
+                                <a href="#Doc-{{SourceDocumentId}}">{{SourceDocumentUrl}}</a>
+                                <pre><code>{{Excerpt}}</code></pre>
+                            </li>
+                            {{/each}}
+                        </ul>
+
+                    </details>
+                </div>
+            </div>
+        </details>
+    </div>
+</script>
+
+@section scripts {
+    <script src="js/crawl.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/handlebars.js/4.0.6/handlebars.min.js"></script>
+    <script>
+        var template = document.getElementById("template").innerHTML;
+        Handlebars.registerHelper("statusCodeClass", function (statusCode) {
+            if (statusCode >= 200 && statusCode < 300) {
+                return "ok";
+            }
+
+            if (statusCode >= 300 && statusCode < 400) {
+                return "redirect";
+            }
+
+            return "error";
+        });
+
+        Handlebars.registerHelper("objectLength", function (obj) {
+            if (obj) {
+                return Object.keys(obj).length;
+            }
+
+            return 0;
+        });
+
+        Handlebars.registerHelper("objectPre", function (obj) {
+            if (obj) {
+                let str = "";
+                for (let key of Object.keys(obj)) {
+                    if (str) {
+                        str += "\r\n";
+                    }
+
+                    str += key + ": " + obj[key];
+                }
+
+                return str;
+            }
+
+            return null;
+        });
+
+        var compiledTemplate = Handlebars.compile(template);
+
+        // Handle events
+        var crawler = null;
+        var btnStart = document.getElementById("BtnCrawlStart");
+        btnStart.addEventListener("click", function (e) {
+            e.preventDefault();
+            // Start web listener
+            crawler = new WebCrawler({
+                url: document.getElementById("Url").value,
+                documentTemplate: compiledTemplate,
+                container: document.getElementById("DocumentContainer")
+            });
+            crawler.start();
+        });
+
+        var btnStop = document.getElementById("BtnCrawlStop");
+        btnStop.addEventListener("click", function (e) {
+            e.preventDefault();
+
+            if (crawler) {
+                crawler.stop();
+                crawler = null;
+            }
+        });
+    </script>
+}
