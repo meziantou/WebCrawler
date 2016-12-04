@@ -131,10 +131,12 @@ namespace WebCrawler.Site
             {
                 Id = document.Id;
                 Url = document.Url;
-                OriginalUrl = document.OriginalUrl;
+                RedirectUrl = document.RedirectUrl;
                 StatusCode = document.StatusCode;
                 CrawledOn = document.CrawledOn;
                 Headers = document.Headers;
+                ErrorMessage = document.ErrorMessage;
+                FullErrorMessage = document.FullErrorMessage;
                 if (document.ReferencedBy != null)
                 {
                     ReferencedBy = document.ReferencedBy.Select(docRef => new ServiceDocumentRef()
@@ -147,13 +149,15 @@ namespace WebCrawler.Site
                 }
             }
 
-            public DateTime CrawledOn { get; private set; }
-            public IDictionary<string, string> Headers { get; private set; }
-            public Guid Id { get; private set; }
-            public string OriginalUrl { get; private set; }
-            public HttpStatusCode StatusCode { get; private set; }
-            public string Url { get; private set; }
-            public IList<ServiceDocumentRef> ReferencedBy { get; set; }
+            public DateTime CrawledOn { get; }
+            public IDictionary<string, string> Headers { get; }
+            public Guid Id { get; }
+            public string RedirectUrl { get; }
+            public HttpStatusCode StatusCode { get; }
+            public string Url { get; }
+            public string ErrorMessage { get; }
+            public string FullErrorMessage { get; }
+            public IList<ServiceDocumentRef> ReferencedBy { get; }
         }
 
         private class ServiceDocumentRef

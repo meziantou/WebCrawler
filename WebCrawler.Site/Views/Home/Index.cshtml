@@ -19,12 +19,12 @@
         <details>
             <summary class="document-summary">
                 <span class="status status-{{statusCodeClass StatusCode}}">{{StatusCode}}</span>
-                <span><a target="_blank" href="{{OriginalUrl}}">{{OriginalUrl}}</a></span>
+                <span><a target="_blank" href="{{Url}}">{{Url}}</a>{{#if RedirectUrl}}<span class="redirect-separator">➜</span><a target="_blank" href="{{RedirectUrl}}">{{RedirectUrl}}</a>{{/if}}</span>
             </summary>
 
             <div class="details">
                 <div>Crawled on '{{CrawledOn}}'</div>
-
+                <div class="error-message"><pre title="{{FullErrorMessage}}">{{ErrorMessage}}</pre></div>
                 <div class="headers">
                     <details>
                         <summary>Headers ({{objectLength Headers}})</summary>

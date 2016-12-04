@@ -40,6 +40,9 @@
 
                 this.documents[index] = data.Document;
                 this.render(data.Document);
+            } else if (data.Type === 3) {
+                console.error(data.Exception);
+                alert(data.Exception);
             }
         };
 

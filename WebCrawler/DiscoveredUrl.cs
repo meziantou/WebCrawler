@@ -5,5 +5,6 @@
         public string Url { get; set; }
         public Document Document { get; set; }
         public string Excerpt { get; set; }
+        public bool IsRedirect { get; set; }
     }
 }

@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "WebCrawler.Console": {
+      "commandName": "Project",
+      "commandLineArgs": "https://www.meziantou.net"
+    }
+  }
+}
