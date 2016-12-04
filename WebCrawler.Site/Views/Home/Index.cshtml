@@ -7,7 +7,7 @@
     </div>
 
     <button id="BtnCrawlStart">Start</button>
-    <button id="BtnCrawlStop">Stop</button>
+    <button id="BtnCrawlStop" disabled="disabled">Stop</button>
 </form>
 
 <div id="DocumentContainer">
@@ -98,25 +98,38 @@
         // Handle events
         var crawler = null;
         var btnStart = document.getElementById("BtnCrawlStart");
+        var btnStop = document.getElementById("BtnCrawlStop");
+        var container = document.getElementById("DocumentContainer");
+
         btnStart.addEventListener("click", function (e) {
             e.preventDefault();
+            container.innerHTML = "";
+            btnStart.disabled = true;
+            btnStop.disabled = false;
+
             // Start web listener
             crawler = new WebCrawler({
                 url: document.getElementById("Url").value,
                 documentTemplate: compiledTemplate,
-                container: document.getElementById("DocumentContainer")
+                container: container,
+                onFinished: onFinished
             });
             crawler.start();
         });
 
-        var btnStop = document.getElementById("BtnCrawlStop");
         btnStop.addEventListener("click", function (e) {
             e.preventDefault();
-
+            
             if (crawler) {
                 crawler.stop();
-                crawler = null;
+                onFinished();
             }
         });
+
+        function onFinished() {
+            btnStart.disabled = false;
+            btnStop.disabled = true;
+            crawler = null;
+        }
     </script>
 }

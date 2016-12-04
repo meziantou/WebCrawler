@@ -3,12 +3,13 @@
         this.url = options.url;
         this.documentTemplate = options.documentTemplate;
         this.container = options.container;
+        this.onFinishedHandler = options.onFinished;
 
         this.documents = [];
     }
 
     start() {
-        console.log("start url");
+        //console.log("start url");
 
         let wsUri = "ws://" + window.location.host + "/ws";
         let socket = new WebSocket(wsUri);
@@ -19,10 +20,14 @@
 
         socket.onclose = e => {
             console.log("socket closed");
+
+            if (this.onFinishedHandler) {
+                this.onFinishedHandler(this);
+            }
         };
 
         socket.onmessage = e => {
-            console.log(e.data);
+            //console.log(e.data);
             let data = JSON.parse(e.data);
             if (data.Type === 1) {
                 this.documents.push(data.Document);

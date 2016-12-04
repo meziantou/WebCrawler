@@ -1,4 +1,16 @@
-﻿.document{
+﻿#DocumentContainer {
+    margin-top: 20px;
+}
+
+.details {
+    margin-left: 60px;
+}
+
+    .details pre {
+        margin: 0.3em 0 1em;
+    }
+
+.document{
     margin-bottom: 5px;
 }
 
