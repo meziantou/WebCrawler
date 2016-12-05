@@ -50,7 +50,7 @@ namespace WebCrawler
             DiscoveredUrl toBeProcessed;
             while (_toProcess.TryDequeue(out toBeProcessed))
             {
-                await ProcessItem(result, toBeProcessed, ct);
+                await ProcessItem(result, toBeProcessed, ct).ConfigureAwait(false);
             }
 
             return result;
@@ -115,11 +115,11 @@ namespace WebCrawler
                             var contentType = response.Content?.Headers.ContentType?.MediaType;
                             if (contentType == null || IsHtmlMimeType(contentType))
                             {
-                                await HandleHtml(doc, response, ct);
+                                await HandleHtml(doc, response, ct).ConfigureAwait(false);
                             }
                             else if (IsCssMimeType(contentType))
                             {
-                                await HandleCss(doc, response, ct);
+                                await HandleCss(doc, response, ct).ConfigureAwait(false);
                             }
                         }
                     }
