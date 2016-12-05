@@ -148,7 +148,9 @@ namespace WebCrawler
                 using (var response = await _client.GetAsync(address, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false))
                 {
                     doc.StatusCode = response.StatusCode;
-                    doc.Headers = Combine(CloneHeaders(response.Headers), CloneHeaders(response.Content?.Headers));
+                    doc.ReasonPhrase = response.ReasonPhrase;
+                    doc.RequestHeaders = Combine(CloneHeaders(response.RequestMessage.Headers), CloneHeaders(response.RequestMessage.Content?.Headers));
+                    doc.ResponseHeaders = Combine(CloneHeaders(response.Headers), CloneHeaders(response.Content?.Headers));
 
                     if (Utilities.IsRedirect(response.StatusCode))
                     {

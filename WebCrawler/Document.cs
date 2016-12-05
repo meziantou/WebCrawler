@@ -16,9 +16,11 @@ namespace WebCrawler
         public IList<DocumentRef> ReferencedBy { get; } = new List<DocumentRef>();
         public DateTime CrawledOn { get; set; }
         public System.Net.HttpStatusCode StatusCode { get; set; }
-        public IDictionary<string, string> Headers { get; set; }
+        public IDictionary<string, string> RequestHeaders { get; set; }
+        public IDictionary<string, string> ResponseHeaders { get; set; }
         public string Title { get; internal set; }
         public string ErrorMessage { get; set; }
         public string FullErrorMessage { get; set; }
+        public string ReasonPhrase { get; set; }
     }
 }
