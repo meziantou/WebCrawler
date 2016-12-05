@@ -219,7 +219,6 @@ namespace WebCrawler
         {
             foreach (var node in htmlDocument.All)
             {
-                // TODO sourceset
                 if (node is IHtmlAnchorElement anchorElement)
                 {
                     Enqueue(document, anchorElement.Href, node, ct);
@@ -242,10 +241,18 @@ namespace WebCrawler
                 else if (node is IHtmlImageElement imageElement)
                 {
                     Enqueue(document, imageElement.Source, node, ct);
+                    foreach (var url in Utilities.ParseScrSet(imageElement.SourceSet))
+                    {
+                        Enqueue(document, url, node, ct);
+                    }
                 }
                 else if (node is IHtmlSourceElement sourceElement)
                 {
                     Enqueue(document, sourceElement.Source, node, ct);
+                    foreach (var url in Utilities.ParseScrSet(sourceElement.SourceSet))
+                    {
+                        Enqueue(document, url, node, ct);
+                    }
                 }
                 else if (node is IHtmlTrackElement trackElement)
                 {

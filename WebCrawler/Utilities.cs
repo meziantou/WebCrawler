@@ -81,7 +81,28 @@ namespace WebCrawler
         {
             return code == HttpStatusCode.Redirect || code == HttpStatusCode.MovedPermanently;
         }
-        
+
+        public static IEnumerable<string> ParseScrSet(string value)
+        {
+            if (value == null)
+                yield break;
+
+            var parts = value.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var part in parts)
+            {
+                var trimmed = part.Trim();
+                var indexOfSpace = trimmed.IndexOfAny(new[] { ' ', '\t', '\r', '\n', '\f' });
+                if (indexOfSpace > 0)
+                {
+                    yield return trimmed.Substring(0, indexOfSpace);
+                }
+                else
+                {
+                    yield return trimmed;
+                }
+            }
+        }
+
         public static string ParseCssUrl(string value)
         {
             if (value == null)
