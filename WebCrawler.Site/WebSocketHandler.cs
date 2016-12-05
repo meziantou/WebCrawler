@@ -40,20 +40,22 @@ namespace WebCrawler.Site
                 return;
             }
 
-            var crawler = new Crawler();
-            crawler.DocumentParsed += Crawler_DocumentParsed;
-            crawler.DocumentUpdated += Crawler_DocumentUpdated;
-            try
+            using (var crawler = new Crawler())
             {
-                var result = await crawler.RunAsync(data.Url);
-            }
-            catch (Exception ex)
-            {
-                await SendJsonAsync(new
+                crawler.DocumentParsed += Crawler_DocumentParsed;
+                crawler.DocumentUpdated += Crawler_DocumentUpdated;
+                try
                 {
-                    Type = 3,
-                    Exception = ex.ToString()
-                });
+                    var result = await crawler.RunAsync(data.Url);
+                }
+                catch (Exception ex)
+                {
+                    await SendJsonAsync(new
+                    {
+                        Type = 3,
+                        Exception = ex.ToString()
+                    });
+                }
             }
         }
 

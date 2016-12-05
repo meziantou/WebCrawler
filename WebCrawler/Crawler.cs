@@ -2,7 +2,6 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
@@ -18,17 +17,34 @@ namespace WebCrawler
 {
     public class Crawler : IDisposable
     {
-        private readonly ConcurrentQueue<DiscoveredUrl> _toProcess = new ConcurrentQueue<DiscoveredUrl>();
+        private readonly CrawlerOptions _options;
+        private HttpClient _client;
+        private readonly BlockingCollection<DiscoveredUrl> _documentToProcess = new BlockingCollection<DiscoveredUrl>();
+        private int _processingThreadCount;
+
         public event EventHandler<DocumentEventArgs> DocumentParsed;
         public event EventHandler<DocumentEventArgs> DocumentUpdated;
-        private readonly HttpClient _client;
 
         static Crawler()
         {
             Encoding.RegisterProvider(WebEncodingProvider.Instance);
         }
 
-        public Crawler()
+        public Crawler() : this(null)
+        {
+        }
+
+        public Crawler(CrawlerOptions options)
+        {
+            if (options == null)
+            {
+                options = new CrawlerOptions();
+            }
+
+            _options = options;
+        }
+
+        private void EnsureHttpClient()
         {
             var handler = new HttpClientHandler
             {
@@ -38,30 +54,55 @@ namespace WebCrawler
             };
 
             _client = new HttpClient(handler, true);
-            _client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.99 Safari/537.36");
+            _client.DefaultRequestHeaders.Add("User-Agent", _options.UserAgent);
         }
 
         public async Task<CrawlResult> RunAsync(string address, CancellationToken ct = default(CancellationToken))
         {
+            EnsureHttpClient();
+
             var result = new CrawlResult();
             result.Address = address;
 
-            _toProcess.Enqueue(new DiscoveredUrl { Url = address });
-            DiscoveredUrl toBeProcessed;
-            while (_toProcess.TryDequeue(out toBeProcessed))
+            _documentToProcess.Add(new DiscoveredUrl { Url = address }, ct);
+
+            var maxConcurrency = _options.MaxConcurrency;
+            var tasks = new Task<Task>[maxConcurrency];
+            for (var i = 0; i < maxConcurrency; i++)
             {
-                await ProcessItem(result, toBeProcessed, ct).ConfigureAwait(false);
+                tasks[i] = Task.Run<Task>(() => ProcessCollectionAsync(result, ct), ct);
             }
 
+            await Task.WhenAll(tasks.Select(task => task.Unwrap()));
             return result;
         }
 
-        private async Task ProcessItem(CrawlResult result, DiscoveredUrl toBeProcessed, CancellationToken ct)
+        private async Task ProcessCollectionAsync(CrawlResult result, CancellationToken ct)
+        {
+            foreach (var item in _documentToProcess.GetConsumingEnumerable(ct))
+            {
+                Interlocked.Increment(ref _processingThreadCount);
+                try
+                {
+                    await ProcessItemAsync(result, item, ct).ConfigureAwait(false);
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref _processingThreadCount);
+                    if (_processingThreadCount == 0 && _documentToProcess.Count == 0)
+                    {
+                        _documentToProcess.CompleteAdding();
+                    }
+                }
+            }
+        }
+
+        private async Task ProcessItemAsync(CrawlResult result, DiscoveredUrl toBeProcessed, CancellationToken ct)
         {
             // Test the domain, same domain as address or external by 1 level 
-            if (!toBeProcessed.IsRedirect && !IsSameHost(result.Address, toBeProcessed.Url))
+            if (!toBeProcessed.IsRedirect && !Utilities.IsSameHost(result.Address, toBeProcessed.Url))
             {
-                if (toBeProcessed.Document == null || !IsSameHost(result.Address, toBeProcessed.Document.Url))
+                if (toBeProcessed.Document == null || !Utilities.IsSameHost(result.Address, toBeProcessed.Document.Url))
                     return;
             }
 
@@ -72,7 +113,10 @@ namespace WebCrawler
                 DocumentRef documentRef = new DocumentRef();
                 documentRef.Document = toBeProcessed.Document;
                 documentRef.Excerpt = toBeProcessed.Excerpt;
-                existingDocument.ReferencedBy.Add(documentRef);
+                lock (existingDocument.ReferencedBy)
+                {
+                    existingDocument.ReferencedBy.Add(documentRef);
+                }
                 OnDocumentUpdated(existingDocument);
                 return;
             }
@@ -80,10 +124,17 @@ namespace WebCrawler
             var doc = await GetAsync(toBeProcessed.Url, ct).ConfigureAwait(false);
             if (toBeProcessed.Document != null)
             {
-                doc.ReferencedBy.Add(new DocumentRef { Document = toBeProcessed.Document, Excerpt = toBeProcessed.Excerpt });
+                lock (doc.ReferencedBy)
+                {
+                    doc.ReferencedBy.Add(new DocumentRef { Document = toBeProcessed.Document, Excerpt = toBeProcessed.Excerpt });
+                }
             }
 
-            result.Documents.Add(doc);
+            lock (result.Documents)
+            {
+                result.Documents.Add(doc);
+            }
+
             OnDocumentParsed(doc);
         }
 
@@ -97,15 +148,15 @@ namespace WebCrawler
                 using (var response = await _client.GetAsync(address, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false))
                 {
                     doc.StatusCode = response.StatusCode;
-                    doc.Headers = Combine(Clone(response.Headers), Clone(response.Content?.Headers));
+                    doc.Headers = Combine(CloneHeaders(response.Headers), CloneHeaders(response.Content?.Headers));
 
-                    if (IsRedirect(response.StatusCode))
+                    if (Utilities.IsRedirect(response.StatusCode))
                     {
                         if (response.Headers.TryGetValues("Location", out var locationHeader))
                         {
                             var location = locationHeader.FirstOrDefault();
                             doc.RedirectUrl = new Url(new Url(address), location).Href;
-                            EnqueueRedirect(doc, doc.RedirectUrl);
+                            EnqueueRedirect(doc, doc.RedirectUrl, ct);
                         }
                     }
                     else
@@ -113,13 +164,13 @@ namespace WebCrawler
                         if (response.Content != null)
                         {
                             var contentType = response.Content?.Headers.ContentType?.MediaType;
-                            if (contentType == null || IsHtmlMimeType(contentType))
+                            if (contentType == null || Utilities.IsHtmlMimeType(contentType))
                             {
-                                await HandleHtml(doc, response, ct).ConfigureAwait(false);
+                                await HandleHtmlAsync(doc, response, ct).ConfigureAwait(false);
                             }
-                            else if (IsCssMimeType(contentType))
+                            else if (Utilities.IsCssMimeType(contentType))
                             {
-                                await HandleCss(doc, response, ct).ConfigureAwait(false);
+                                await HandleCssAsync(doc, response, ct).ConfigureAwait(false);
                             }
                         }
                     }
@@ -147,7 +198,7 @@ namespace WebCrawler
             return s;
         }
 
-        private async Task HandleHtml(Document document, HttpResponseMessage response, CancellationToken ct)
+        private async Task HandleHtmlAsync(Document document, HttpResponseMessage response, CancellationToken ct)
         {
             var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
@@ -159,91 +210,105 @@ namespace WebCrawler
             var htmlDocument = await browsingContext.OpenAsync(action => action.Address(document.Url).Content(content).Headers(response.Headers).Status(response.StatusCode), ct).ConfigureAwait(false);
 
             document.Title = htmlDocument.Title;
+            GatherUrls(document, htmlDocument, ct);
+        }
 
+        private void GatherUrls(Document document, IDocument htmlDocument, CancellationToken ct)
+        {
             foreach (var node in htmlDocument.All)
             {
                 // TODO sourceset
                 if (node is IHtmlAnchorElement anchorElement)
                 {
-                    Enqueue(document, anchorElement.Href, node);
+                    Enqueue(document, anchorElement.Href, node, ct);
                 }
                 else if (node is IHtmlScriptElement scriptElement)
                 {
                     if (!string.IsNullOrEmpty(scriptElement.Source))
                     {
-                        if (string.IsNullOrEmpty(scriptElement.Type) || IsJavaScriptMimeType(scriptElement.Type))
+                        if (string.IsNullOrEmpty(scriptElement.Type) || Utilities.IsJavaScriptMimeType(scriptElement.Type))
                         {
                             var href = new Url(scriptElement.BaseUrl, scriptElement.Source).Href;
-                            Enqueue(document, href, node);
+                            Enqueue(document, href, node, ct);
                         }
                     }
                 }
                 else if (node is IHtmlLinkElement linkElement)
                 {
-                    Enqueue(document, linkElement.Href, node);
+                    Enqueue(document, linkElement.Href, node, ct);
                 }
                 else if (node is IHtmlImageElement imageElement)
                 {
-                    Enqueue(document, imageElement.Source, node);
+                    Enqueue(document, imageElement.Source, node, ct);
                 }
                 else if (node is IHtmlSourceElement sourceElement)
                 {
-                    Enqueue(document, sourceElement.Source, node);
+                    Enqueue(document, sourceElement.Source, node, ct);
                 }
                 else if (node is IHtmlTrackElement trackElement)
                 {
-                    Enqueue(document, trackElement.Source, node);
+                    Enqueue(document, trackElement.Source, node, ct);
                 }
                 else if (node is IHtmlObjectElement objectElement)
                 {
-                    Enqueue(document, objectElement.Source, node);
+                    Enqueue(document, objectElement.Source, node, ct);
                 }
                 else if (node is IHtmlAudioElement audioElement)
                 {
-                    Enqueue(document, audioElement.Source, node);
+                    Enqueue(document, audioElement.Source, node, ct);
                 }
                 else if (node is IHtmlVideoElement videoElement)
                 {
-                    Enqueue(document, videoElement.Source, node);
-                    Enqueue(document, videoElement.Poster, node);
+                    Enqueue(document, videoElement.Source, node, ct);
+                    Enqueue(document, videoElement.Poster, node, ct);
                 }
                 else if (node is IHtmlInlineFrameElement frameElement)
                 {
-                    Enqueue(document, frameElement.Source, node);
+                    Enqueue(document, frameElement.Source, node, ct);
                 }
                 else if (node is IHtmlAreaElement areaElement)
                 {
-                    Enqueue(document, areaElement.Href, node);
+                    Enqueue(document, areaElement.Href, node, ct);
                 }
                 else if (node is IHtmlStyleElement styleElement)
                 {
-                    HandleCss(document, styleElement.InnerHtml);
+                    HandleCss(document, styleElement.InnerHtml, ct);
                 }
 
                 var style = node.GetAttribute("style");
                 if (!string.IsNullOrWhiteSpace(style))
                 {
-                    HandleCss(document, "dummy{" + style + "}");
+                    HandleCss(document, "dummy{" + style + "}", ct);
                 }
             }
         }
 
-        private async Task HandleCss(Document document, HttpResponseMessage response, CancellationToken ct)
+        private async Task HandleCssAsync(Document document, HttpResponseMessage response, CancellationToken ct)
         {
             var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             var cssParser = new CssParser();
             var stylesheet = cssParser.ParseStylesheet(content);
-            HandleCss(document, stylesheet);
+            HandleCss(document, stylesheet, ct);
         }
 
-        private void HandleCss(Document document, string css)
+        private void HandleCss(Document document, string css, CancellationToken ct)
         {
             var cssParser = new CssParser();
             var stylesheet = cssParser.ParseStylesheet(css);
-            HandleCss(document, stylesheet);
+            HandleCss(document, stylesheet, ct);
         }
 
-        private void HandleCss(Document document, ICssNode node)
+        private void HandleCss(Document document, ICssNode node, CancellationToken ct)
+        {
+            GatherUrls(document, node, ct);
+
+            foreach (var child in node.Children)
+            {
+                HandleCss(document, child, ct);
+            }
+        }
+
+        private void GatherUrls(Document document, ICssNode node, CancellationToken ct)
         {
             if (node is ICssProperty propertyRule)
             {
@@ -253,136 +318,61 @@ namespace WebCrawler
                     var parts = value.Split(',');
                     foreach (var part in parts)
                     {
-                        var url = ParseCssUrl(part);
+                        var url = Utilities.ParseCssUrl(part);
                         if (url != null)
                         {
                             var finalUrl = new Url(new Url(document.Url), url);
-                            Enqueue(document, finalUrl.Href, propertyRule);
+                            Enqueue(document, finalUrl.Href, propertyRule, ct);
                         }
                     }
                 }
             }
+        }
 
-            foreach (var child in node.Children)
+        private void Enqueue(Document document, string url, string excerpt, CancellationToken ct)
+        {
+            if (!MustProcessUrl(url))
+                return;
+
+            // Remove fragment
+            var parsedUrl = new Url(url);
+            parsedUrl.Fragment = null;
+
+            var discoveredUrl = new DiscoveredUrl();
+            discoveredUrl.Url = parsedUrl.Href;
+            discoveredUrl.Document = document;
+            discoveredUrl.Excerpt = excerpt;
+
+            _documentToProcess.Add(discoveredUrl, ct);
+        }
+
+        private void Enqueue(Document document, string url, IElement node, CancellationToken ct)
+        {
+            Enqueue(document, url, GetExcerpt(node), ct);
+        }
+
+        private void Enqueue(Document document, string url, ICssNode node, CancellationToken ct)
+        {
+            Enqueue(document, url, GetExcerpt(node), ct);
+        }
+
+        private void EnqueueRedirect(Document document, string url, CancellationToken ct)
+        {
+            if (!MustProcessUrl(url))
+                return;
+
+            // Remove fragment
+            var parsedUrl = new Url(url);
+            parsedUrl.Fragment = null;
+
+            var discoveredUrl = new DiscoveredUrl
             {
-                HandleCss(document, child);
-            }
-        }
+                Url = parsedUrl.Href,
+                Document = document,
+                IsRedirect = true
+            };
 
-        private string ParseCssUrl(string value)
-        {
-            if (value == null)
-                return null;
-
-            value = value.Trim();
-            if (value.StartsWith("url"))
-            {
-                var result = new StringBuilder(value.Length);
-                bool isInParentheses = false;
-                bool isInQuote = false;
-                char quoteChar = '\0';
-                for (int i = 3; i < value.Length; i++)
-                {
-                    char c = value[i];
-                    if (c == ' ' && !isInQuote)
-                        continue;
-
-                    if (c == '(')
-                    {
-                        if (isInQuote)
-                        {
-                            result.Append(c);
-                            continue;
-                        }
-
-                        if (isInParentheses)
-                            return null;
-
-                        isInParentheses = true;
-                        continue;
-                    }
-                    else if (c == ')')
-                    {
-                        if (isInQuote)
-                        {
-                            result.Append(c);
-                            continue;
-                        }
-
-                        if (!isInParentheses)
-                        {
-                            return null;
-                        }
-
-                        return result.ToString();
-                    }
-                    else if (c == '"' || c == '\'')
-                    {
-                        if (isInQuote)
-                        {
-                            if (c == quoteChar)
-                            {
-                                isInQuote = false;
-                                continue;
-                            }
-                            else
-                            {
-                                result.Append(c);
-                                continue;
-                            }
-                        }
-
-                        isInQuote = true;
-                        quoteChar = c;
-                        result.Clear();
-                    }
-                    else
-                    {
-                        if (isInParentheses)
-                        {
-                            result.Append(c);
-                        }
-                    }
-                }
-            }
-
-            return null;
-        }
-
-        private void Enqueue(Document document, string url, IElement node)
-        {
-            if (!MustProcessUrl(url))
-                return;
-
-            // Remove fragment
-            var parsedUrl = new Url(url);
-            parsedUrl.Fragment = null;
-
-            _toProcess.Enqueue(new DiscoveredUrl { Url = parsedUrl.Href, Document = document, Excerpt = GetExcerpt(node) });
-        }
-
-        private void Enqueue(Document document, string url, ICssNode node)
-        {
-            if (!MustProcessUrl(url))
-                return;
-
-            // Remove fragment
-            var parsedUrl = new Url(url);
-            parsedUrl.Fragment = null;
-
-            _toProcess.Enqueue(new DiscoveredUrl { Url = parsedUrl.Href, Document = document, Excerpt = GetExcerpt(node) });
-        }
-
-        private void EnqueueRedirect(Document document, string url)
-        {
-            if (!MustProcessUrl(url))
-                return;
-
-            // Remove fragment
-            var parsedUrl = new Url(url);
-            parsedUrl.Fragment = null;
-
-            _toProcess.Enqueue(new DiscoveredUrl { Url = parsedUrl.Href, Document = document, IsRedirect = true });
+            _documentToProcess.Add(discoveredUrl, ct);
         }
 
         private bool MustProcessUrl(string url)
@@ -390,12 +380,8 @@ namespace WebCrawler
             if (string.IsNullOrEmpty(url))
                 return false;
 
-            if (url.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) ||
-                url.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase) ||
-                url.StartsWith("tel:", StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            return true;
+            return url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                   url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string GetExcerpt(IElement node)
@@ -424,81 +410,7 @@ namespace WebCrawler
             DocumentUpdated?.Invoke(this, new DocumentEventArgs(document));
         }
 
-        private static bool IsSameHost(string a, string b)
-        {
-            return new Url(a).Host == new Url(b).Host;
-        }
-
-        private static bool IsHtmlMimeType(string mimeType)
-        {
-            string[] mimeTypes =
-            {
-                "text/html",
-                "application/xhtml+xml"
-            };
-
-            foreach (var type in mimeTypes)
-            {
-                if (string.Equals(mimeType, type, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-
-            return false;
-        }
-
-        private static bool IsCssMimeType(string mimeType)
-        {
-            string[] mimeTypes =
-            {
-                "text/css"
-            };
-
-            foreach (var type in mimeTypes)
-            {
-                if (string.Equals(mimeType, type, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-
-            return false;
-        }
-
-        private static bool IsJavaScriptMimeType(string mimeType)
-        {
-            string[] mimeTypes =
-            {
-                "application/ecmascript",
-                "application/javascript",
-                "application/x-ecmascript",
-                "application/x-javascript",
-                "text/ecmascript",
-                "text/javascript",
-                "text/javascript1.0",
-                "text/javascript1.1",
-                "text/javascript1.2",
-                "text/javascript1.3",
-                "text/javascript1.4",
-                "text/javascript1.5",
-                "text/jscript",
-                "text/livescript",
-                "text/x-ecmascript",
-                "text/x-javascript"
-            };
-
-            foreach (var type in mimeTypes)
-            {
-                if (string.Equals(mimeType, type, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-
-            return false;
-        }
-
-        private static bool IsRedirect(HttpStatusCode code)
-        {
-            return code == HttpStatusCode.Redirect || code == HttpStatusCode.MovedPermanently;
-        }
-
-        private static IDictionary<string, string> Clone(IEnumerable<KeyValuePair<string, IEnumerable<string>>> dict)
+        private static IDictionary<string, string> CloneHeaders(IEnumerable<KeyValuePair<string, IEnumerable<string>>> dict)
         {
             var clone = new Dictionary<string, string>();
             if (dict != null)
@@ -529,6 +441,7 @@ namespace WebCrawler
         public void Dispose()
         {
             _client?.Dispose();
+            _client = null;
         }
     }
 }

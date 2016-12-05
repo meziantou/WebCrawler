@@ -8,7 +8,9 @@ class Program
         if (args.Length == 0)
             return;
 
-        Crawler crawler = new Crawler();
-        var result = crawler.RunAsync(args[0]).Result;
+        using (Crawler crawler = new Crawler())
+        {
+            var result = crawler.RunAsync(args[0]).Result;
+        }
     }
 }
