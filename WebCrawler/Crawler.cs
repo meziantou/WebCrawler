@@ -290,13 +290,13 @@ namespace WebCrawler
                 }
                 else if (node is IHtmlStyleElement styleElement)
                 {
-                    HandleCss(document, styleElement.InnerHtml, ct);
+                    HandleCss(document, node.BaseUri, styleElement.InnerHtml, ct);
                 }
 
                 var style = node.GetAttribute("style");
                 if (!string.IsNullOrWhiteSpace(style))
                 {
-                    HandleCss(document, "dummy{" + style + "}", ct);
+                    HandleCss(document, node.BaseUri, "dummy{" + style + "}", ct);
                 }
             }
         }
@@ -306,27 +306,27 @@ namespace WebCrawler
             var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             var cssParser = new CssParser();
             var stylesheet = cssParser.ParseStylesheet(content);
-            HandleCss(document, stylesheet, ct);
+            HandleCss(document, null, stylesheet, ct);
         }
 
-        private void HandleCss(Document document, string css, CancellationToken ct)
+        private void HandleCss(Document document, string baseUrl, string css, CancellationToken ct)
         {
             var cssParser = new CssParser();
             var stylesheet = cssParser.ParseStylesheet(css);
-            HandleCss(document, stylesheet, ct);
+            HandleCss(document, baseUrl, stylesheet, ct);
         }
 
-        private void HandleCss(Document document, ICssNode node, CancellationToken ct)
+        private void HandleCss(Document document, string baseUrl, ICssNode node, CancellationToken ct)
         {
-            GatherUrls(document, node, ct);
+            GatherUrls(document, baseUrl, node, ct);
 
             foreach (var child in node.Children)
             {
-                HandleCss(document, child, ct);
+                HandleCss(document, baseUrl, child, ct);
             }
         }
 
-        private void GatherUrls(Document document, ICssNode node, CancellationToken ct)
+        private void GatherUrls(Document document, string baseUrl, ICssNode node, CancellationToken ct)
         {
             if (node is ICssProperty propertyRule)
             {
@@ -339,7 +339,7 @@ namespace WebCrawler
                         var url = Utilities.ParseCssUrl(part);
                         if (url != null)
                         {
-                            var finalUrl = new Url(new Url(document.Url), url);
+                            var finalUrl = new Url(new Url(baseUrl ?? document.Url), url);
                             Enqueue(document, finalUrl.Href, propertyRule, ct);
                         }
                     }
@@ -366,7 +366,8 @@ namespace WebCrawler
 
         private void Enqueue(Document document, string url, IElement node, CancellationToken ct)
         {
-            Enqueue(document, url, GetExcerpt(node), ct);
+            var fullUrl = new Url(node.BaseUrl, url);
+            Enqueue(document, fullUrl.Href, GetExcerpt(node), ct);
         }
 
         private void Enqueue(Document document, string url, ICssNode node, CancellationToken ct)
