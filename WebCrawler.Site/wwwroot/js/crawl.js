@@ -15,12 +15,12 @@
         let wsUri = protocol + "//" + window.location.host + "/ws";
         let socket = new WebSocket(wsUri);
         socket.onopen = e => {
-            console.log("socket opened");
+            console.log("socket opened", e);
             socket.send(JSON.stringify({ url: this.url }));
         };
 
         socket.onclose = e => {
-            console.log("socket closed");
+            console.log("socket closed", e);
 
             this.computeReferences();
             this.renderAll();

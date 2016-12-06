@@ -12,12 +12,13 @@ using System.Linq;
 
 namespace WebCrawler.Site
 {
-    public class WebSocketHandler : IDisposable
+    public class WebSocketHandler
     {
-        private WebSocket _socket;
+        private readonly WebSocket _socket;
 
         private WebSocketHandler(WebSocket socket)
         {
+            if (socket == null) throw new ArgumentNullException(nameof(socket));
             _socket = socket;
         }
 
@@ -25,29 +26,48 @@ namespace WebCrawler.Site
         {
             if (!httpContext.WebSockets.IsWebSocketRequest)
                 return;
-
-            var socket = await httpContext.WebSockets.AcceptWebSocketAsync();
-            var handler = new WebSocketHandler(socket);
-            await handler.InitAsync();
+            
+            using (var socket = await httpContext.WebSockets.AcceptWebSocketAsync())
+            {
+                var handler = new WebSocketHandler(socket);
+                await handler.ProcessAsync(httpContext.RequestAborted);
+            }
         }
 
-        private async Task InitAsync()
+        private async Task ProcessAsync(CancellationToken ct = default(CancellationToken))
         {
-            var data = await ReceiveJsonAsync<StartCrawlingArgs>(CancellationToken.None);
+            var data = await ReceiveJsonAsync<StartCrawlingArgs>(ct);
             if (data == null)
             {
-                await _socket.CloseAsync(WebSocketCloseStatus.InvalidPayloadData, "", CancellationToken.None);
+                await _socket.CloseAsync(WebSocketCloseStatus.InvalidPayloadData, "", ct);
                 return;
             }
 
+
             using (var crawler = new Crawler())
             {
-                crawler.DocumentParsed += Crawler_DocumentParsed;
-                crawler.DocumentUpdated += Crawler_DocumentUpdated;
-                crawler.DocumentRefAdded += Crawler_DocumentRefAdded;
+                crawler.DocumentParsed += async (sender, e) =>
+                {
+                    await SendJsonAsync(new
+                    {
+                        Type = 1,
+                        Document = new ServiceDocument(e.Document)
+                    }, ct);
+
+                };
+
+                crawler.DocumentRefAdded += async (sender, e) =>
+                {
+                    await SendJsonAsync(new
+                    {
+                        Type = 4,
+                        DocumentRef = new ServiceDocumentRef(e.DocumentRef)
+                    }, ct);
+                };
+
                 try
                 {
-                    var result = await crawler.RunAsync(data.Url);
+                    await crawler.RunAsync(data.Url, ct).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -55,40 +75,15 @@ namespace WebCrawler.Site
                     {
                         Type = 3,
                         Exception = ex.ToString()
-                    });
+                    }, ct);
                 }
             }
         }
 
-        private void Crawler_DocumentRefAdded(object sender, DocumentRefAddedEventArgs e)
-        {
-            SendJsonAsync(new
-            {
-                Type = 4,
-                DocumentRef = new ServiceDocumentRef(e.DocumentRef)
-            });
-        }
-
-        private void Crawler_DocumentUpdated(object sender, DocumentEventArgs e)
-        {
-            //SendJsonAsync(new
-            //{
-            //    Type = 2,
-            //    Document = new ServiceDocument(e.SourceDocument)
-            //});
-        }
-
-        private void Crawler_DocumentParsed(object sender, DocumentEventArgs e)
-        {
-            SendJsonAsync(new
-            {
-                Type = 1,
-                Document = new ServiceDocument(e.Document)
-            });
-        }
-
         private Task SendJsonAsync(object data, CancellationToken ct = default(CancellationToken))
         {
+            ct.ThrowIfCancellationRequested();
+
             var json = JsonConvert.SerializeObject(data);
             var buffer = Encoding.UTF8.GetBytes(json);
             var segment = new ArraySegment<byte>(buffer);
@@ -103,13 +98,14 @@ namespace WebCrawler.Site
 
         private async Task<string> ReceiveStringAsync(CancellationToken ct = default(CancellationToken))
         {
-            ArraySegment<Byte> buffer = new ArraySegment<byte>(new Byte[8192]);
-            WebSocketReceiveResult result = null;
-
+            var buffer = new ArraySegment<byte>(new byte[8192]);
             using (var ms = new MemoryStream())
             {
+                WebSocketReceiveResult result;
                 do
                 {
+                    ct.ThrowIfCancellationRequested();
+
                     result = await _socket.ReceiveAsync(buffer, ct);
                     ms.Write(buffer.Array, buffer.Offset, result.Count);
                 }
@@ -124,12 +120,6 @@ namespace WebCrawler.Site
                     return await reader.ReadToEndAsync();
                 }
             }
-        }
-
-        public void Dispose()
-        {
-            _socket?.Dispose();
-            _socket = null;
         }
 
         private class StartCrawlingArgs

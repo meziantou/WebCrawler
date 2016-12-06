@@ -59,14 +59,35 @@ namespace WebCrawler
             _client.DefaultRequestHeaders.Add("User-Agent", _options.UserAgent);
         }
 
-        public async Task<CrawlResult> RunAsync(string address, CancellationToken ct = default(CancellationToken))
+        private IEnumerable<string> GetRootUrls(string value)
         {
+            var urls = value.Split(',');
+            foreach (var url in urls.Select(url => url.Trim()))
+            {
+                if (!IsHttpProtocol(url))
+                {
+                    yield return "http://" + url;
+                }
+                else
+                {
+                    yield return url;
+                }
+            }
+        }
+
+        public async Task<CrawlResult> RunAsync(string url, CancellationToken ct = default(CancellationToken))
+        {
+            if (url == null) throw new ArgumentNullException(nameof(url));
+
             EnsureHttpClient();
 
             var result = new CrawlResult();
-            result.Address = address;
+            result.Urls = GetRootUrls(url).ToList();
 
-            _discoveredUrls.Add(new DiscoveredUrl { Url = address }, ct);
+            foreach (var item in result.Urls)
+            {
+                _discoveredUrls.Add(new DiscoveredUrl { Url = item }, ct);
+            }
 
             var maxConcurrency = _options.MaxConcurrency;
             var tasks = new Task<Task>[maxConcurrency];
@@ -75,7 +96,7 @@ namespace WebCrawler
                 tasks[i] = Task.Run<Task>(() => ProcessCollectionAsync(result, ct), ct);
             }
 
-            await Task.WhenAll(tasks.Select(task => task.Unwrap()));
+            await Task.WhenAll(tasks.Select(task => task.Unwrap())).ConfigureAwait(false);
             return result;
         }
 
@@ -83,6 +104,8 @@ namespace WebCrawler
         {
             foreach (var item in _discoveredUrls.GetConsumingEnumerable(ct))
             {
+                ct.ThrowIfCancellationRequested();
+
                 Interlocked.Increment(ref _processingThreadCount);
                 try
                 {
@@ -99,12 +122,23 @@ namespace WebCrawler
             }
         }
 
+        private bool IsSameHost(CrawlResult result, string url)
+        {
+            foreach (var u in result.Urls)
+            {
+                if (Utilities.IsSameHost(u, url))
+                    return true;
+            }
+
+            return false;
+        }
+
         private async Task ProcessItemAsync(CrawlResult result, DiscoveredUrl discoveredUrl, CancellationToken ct)
         {
-            // Test the domain, same domain as address or external by 1 level 
-            if (!discoveredUrl.IsRedirect && !Utilities.IsSameHost(result.Address, discoveredUrl.Url))
+            // Test the domain, same domain as start url or external by 1 level 
+            if (!discoveredUrl.IsRedirect && !IsSameHost(result, discoveredUrl.Url))
             {
-                if (discoveredUrl.SourceDocument == null || !Utilities.IsSameHost(result.Address, discoveredUrl.SourceDocument.Url))
+                if (discoveredUrl.SourceDocument == null || !IsSameHost(result, discoveredUrl.SourceDocument.Url))
                     return;
             }
 
@@ -127,7 +161,11 @@ namespace WebCrawler
                 existingDocument = result.Documents.FirstOrDefault(d => doc.IsSame(d)); // Another thread as processed the same URL at the same time
                 if (existingDocument != null)
                 {
-                    AddReference(discoveredUrl, existingDocument);
+                    if (!discoveredUrl.IsRedirect)
+                    {
+                        AddReference(discoveredUrl, existingDocument);
+                    }
+
                     return;
                 }
             }
@@ -136,7 +174,7 @@ namespace WebCrawler
             {
                 lock (doc.ReferencedBy)
                 {
-                    doc.ReferencedBy.Add(new DocumentRef { TargetDocument = doc, SourceDocument = discoveredUrl.SourceDocument, Excerpt = discoveredUrl.Excerpt });
+                    doc.ReferencedBy.Add(new DocumentRef { SourceDocument = discoveredUrl.SourceDocument, TargetDocument = doc, Excerpt = discoveredUrl.Excerpt });
                 }
             }
 
@@ -148,19 +186,19 @@ namespace WebCrawler
             OnDocumentParsed(doc);
         }
 
-        private void AddReference(DiscoveredUrl toBeProcessed, Document existingDocument)
+        private void AddReference(DiscoveredUrl discoveredUrl, Document document)
         {
             var documentRef = new DocumentRef();
-            documentRef.SourceDocument = toBeProcessed.SourceDocument;
-            documentRef.TargetDocument = existingDocument;
-            documentRef.Excerpt = toBeProcessed.Excerpt;
-            lock (existingDocument.ReferencedBy)
+            documentRef.SourceDocument = discoveredUrl.SourceDocument;
+            documentRef.TargetDocument = document;
+            documentRef.Excerpt = discoveredUrl.Excerpt;
+            lock (document.ReferencedBy)
             {
-                existingDocument.ReferencedBy.Add(documentRef);
+                document.ReferencedBy.Add(documentRef);
             }
 
             OnDocumentRefAdded(documentRef);
-            OnDocumentUpdated(existingDocument);
+            OnDocumentUpdated(document);
         }
 
         private async Task<Document> GetAsync(DiscoveredUrl discoveredUrl, CancellationToken ct = default(CancellationToken))
@@ -438,6 +476,11 @@ namespace WebCrawler
         }
 
         private bool MustProcessUrl(string url)
+        {
+            return IsHttpProtocol(url);
+        }
+
+        private static bool IsHttpProtocol(string url)
         {
             if (string.IsNullOrEmpty(url))
                 return false;
