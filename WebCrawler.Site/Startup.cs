@@ -1,11 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+﻿using System.IO;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging;
 
 namespace WebCrawler.Site
@@ -50,11 +49,26 @@ namespace WebCrawler.Site
             app.UseStaticFiles();
 
 
+            var wellKnownDirectory = Path.Combine(Directory.GetCurrentDirectory(), @".well-known");
+            if (!Directory.Exists(wellKnownDirectory))
+            {
+                Directory.CreateDirectory(wellKnownDirectory);
+            }
+
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(wellKnownDirectory),
+                RequestPath = new PathString("/.well-known"),
+                ServeUnknownFileTypes = true // serve extensionless file
+            });
+
+
+
             app.Map("/ws", wsApp =>
             {
                 wsApp.UseWebSockets();
                 wsApp.Use(WebSocketHandler.AcceptorAsync);
-            });            
+            });
 
             app.UseMvc(routes =>
             {

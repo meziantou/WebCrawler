@@ -11,8 +11,8 @@
 
     start() {
         //console.log("start url");
-
-        let wsUri = "ws://" + window.location.host + "/ws";
+        let protocol = location.protocol === "https:" ? "wss:" : "ws:";
+        let wsUri = protocol + "//" + window.location.host + "/ws";
         let socket = new WebSocket(wsUri);
         socket.onopen = e => {
             console.log("socket opened");
