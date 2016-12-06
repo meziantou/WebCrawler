@@ -6,6 +6,7 @@
         this.onFinishedHandler = options.onFinished;
 
         this.documents = [];
+        this.references = [];
     }
 
     start() {
@@ -21,6 +22,9 @@
         socket.onclose = e => {
             console.log("socket closed");
 
+            this.computeReferences();
+            this.renderAll();
+
             if (this.onFinishedHandler) {
                 this.onFinishedHandler(this);
             }
@@ -32,17 +36,18 @@
             if (data.Type === 1) {
                 this.documents.push(data.Document);
                 this.render(data.Document);
-            } else if (data.Type === 2) {
+            } /*else if (data.Type === 2) {
                 // Find & Replace doc
-                let index = this.documents.findIndex(d => d.Id == data.Document.Id);
-                if (index < 0)
-                    return;
-
-                this.documents[index] = data.Document;
-                this.render(data.Document);
-            } else if (data.Type === 3) {
+                let index = this.documents.findIndex(d => d.Id === data.Document.Id);
+                if (index >= 0) {
+                    this.documents[index] = data.Document;
+                    //this.render(data.Document);
+                }
+            }*/ else if (data.Type === 3) {
                 console.error(data.Exception);
                 alert(data.Exception);
+            } else if (data.Type === 4) {
+                this.references.push(data.DocumentRef);
             }
         };
 
@@ -57,13 +62,19 @@
         this.socket.close();
     }
 
-    render(doc) {
-        //let html = "";
-        //for (let document of this.documents) {
-        //    html += this.documentTemplate(document);
-        //}
-        let existingItem = document.querySelector("[data-document-id='" + doc.Id + "']");
+    renderAll() {
+        this.container.innerHTML = "";
+        for (let doc of this.documents) {
+            let div = document.createElement("div");
+            div.innerHTML = this.documentTemplate(doc);
+            while (div.childNodes.length > 0) {
+                this.container.appendChild(div.childNodes[0]);
+            }
+        }
+    }
 
+    render(doc) {
+        let existingItem = document.querySelector("[data-document-id='" + doc.Id + "']");
         let div = document.createElement("div");
         div.innerHTML = this.documentTemplate(doc);
         while (div.childNodes.length > 0) {
@@ -76,6 +87,28 @@
 
         if (existingItem) {
             existingItem.remove();
+        }
+    }
+
+    computeReferences() {
+        for (let reference of this.references) {
+            let sourceDocument = this.documents.find(d => d.Id === reference.SourceDocumentId);
+            if (sourceDocument) {
+                if (!Array.isArray(sourceDocument.References)) {
+                    sourceDocument.References = [];
+                }
+
+                sourceDocument.References.push(reference);
+            }
+
+            let targetDocument = this.documents.find(d => d.Id === reference.TargetDocumentId);
+            if (targetDocument) {
+                if (!Array.isArray(targetDocument.ReferencedBy)) {
+                    targetDocument.ReferencedBy = [];
+                }
+
+                targetDocument.ReferencedBy.push(reference);
+            }
         }
     }
 }

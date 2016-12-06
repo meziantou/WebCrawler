@@ -2,7 +2,8 @@
 {
     public class DocumentRef
     {
-        public Document Document { get; set; }
+        public Document SourceDocument { get; set; }
+        public Document TargetDocument { get; set; }
         public string Excerpt { get; set; }
     }
 }

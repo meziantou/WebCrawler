@@ -23,6 +23,7 @@ namespace WebCrawler
         private int _processingThreadCount;
 
         public event EventHandler<DocumentEventArgs> DocumentParsed;
+        public event EventHandler<DocumentRefAddedEventArgs> DocumentRefAdded;
         public event EventHandler<DocumentEventArgs> DocumentUpdated;
 
         static Crawler()
@@ -107,16 +108,24 @@ namespace WebCrawler
             }
 
             // Already processed
-            var existingDocument = result.Documents.FirstOrDefault(d => d.Url == toBeProcessed.Url);
+            Document existingDocument;
+            lock (result.Documents)
+            {
+                existingDocument = result.Documents.FirstOrDefault(d => d.Url == toBeProcessed.Url);
+            }
+
             if (existingDocument != null)
             {
                 DocumentRef documentRef = new DocumentRef();
-                documentRef.Document = toBeProcessed.Document;
+                documentRef.SourceDocument = toBeProcessed.Document;
+                documentRef.TargetDocument = existingDocument;
                 documentRef.Excerpt = toBeProcessed.Excerpt;
                 lock (existingDocument.ReferencedBy)
                 {
                     existingDocument.ReferencedBy.Add(documentRef);
                 }
+
+                OnDocumentRefAdded(documentRef);
                 OnDocumentUpdated(existingDocument);
                 return;
             }
@@ -126,7 +135,7 @@ namespace WebCrawler
             {
                 lock (doc.ReferencedBy)
                 {
-                    doc.ReferencedBy.Add(new DocumentRef { Document = toBeProcessed.Document, Excerpt = toBeProcessed.Excerpt });
+                    doc.ReferencedBy.Add(new DocumentRef { TargetDocument = doc, SourceDocument = toBeProcessed.Document, Excerpt = toBeProcessed.Excerpt });
                 }
             }
 
@@ -417,6 +426,11 @@ namespace WebCrawler
         protected virtual void OnDocumentUpdated(Document document)
         {
             DocumentUpdated?.Invoke(this, new DocumentEventArgs(document));
+        }
+
+        protected virtual void OnDocumentRefAdded(DocumentRef documentRef)
+        {
+            DocumentRefAdded?.Invoke(this, new DocumentRefAddedEventArgs(documentRef));
         }
 
         private static IDictionary<string, string> CloneHeaders(IEnumerable<KeyValuePair<string, IEnumerable<string>>> dict)

@@ -3,7 +3,7 @@
 <form>
     <div>
         <label for="Url">Url</label>
-        <input id="Url" type="url" value="https://www.meziantou.net" />
+        <input id="Url" type="url" />
     </div>
 
     <button id="BtnCrawlStart">Start</button>
@@ -38,10 +38,27 @@
                         <pre>{{objectPre ResponseHeaders}}</pre>
                     </details>
                 </div>
-
+                
+                {{#if References}}
+                <div class="links">
+                    <details>
+                        <summary>Links ({{References.length}})</summary>
+                        <ul>
+                            {{#each References}}
+                            <li>
+                                <a href="#Doc-{{TargetDocumentId}}">{{TargetDocumentUrl}}</a>
+                                <pre><code>{{Excerpt}}</code></pre>
+                            </li>
+                            {{/each}}
+                        </ul>
+                    </details>
+                </div>
+                {{/if}}
+                
+                {{#if ReferencedBy}}
                 <div class="referenced-by">
                     <details>
-                        <summary>References ({{ReferencedBy.length}})</summary>
+                        <summary>Referenced by ({{ReferencedBy.length}})</summary>
                         <ul>
                             {{#each ReferencedBy}}
                             <li>
@@ -50,9 +67,9 @@
                             </li>
                             {{/each}}
                         </ul>
-
                     </details>
                 </div>
+                {{/if}}
             </div>
         </details>
     </div>

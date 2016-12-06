@@ -44,6 +44,7 @@ namespace WebCrawler.Site
             {
                 crawler.DocumentParsed += Crawler_DocumentParsed;
                 crawler.DocumentUpdated += Crawler_DocumentUpdated;
+                crawler.DocumentRefAdded += Crawler_DocumentRefAdded;
                 try
                 {
                     var result = await crawler.RunAsync(data.Url);
@@ -59,13 +60,22 @@ namespace WebCrawler.Site
             }
         }
 
-        private void Crawler_DocumentUpdated(object sender, DocumentEventArgs e)
+        private void Crawler_DocumentRefAdded(object sender, DocumentRefAddedEventArgs e)
         {
             SendJsonAsync(new
             {
-                Type = 2,
-                Document = new ServiceDocument(e.Document)
+                Type = 4,
+                DocumentRef = new ServiceDocumentRef(e.DocumentRef)
             });
+        }
+
+        private void Crawler_DocumentUpdated(object sender, DocumentEventArgs e)
+        {
+            //SendJsonAsync(new
+            //{
+            //    Type = 2,
+            //    Document = new ServiceDocument(e.Document)
+            //});
         }
 
         private void Crawler_DocumentParsed(object sender, DocumentEventArgs e)
@@ -143,13 +153,10 @@ namespace WebCrawler.Site
                 ReasonPhrase = document.ReasonPhrase;
                 if (document.ReferencedBy != null)
                 {
-                    ReferencedBy = document.ReferencedBy.Select(docRef => new ServiceDocumentRef()
+                    lock (document.ReferencedBy)
                     {
-                        Excerpt = docRef.Excerpt,
-                        SourceDocumentId = docRef.Document.Id,
-                        TargetDocumentId = document.Id,
-                        SourceDocumentUrl = docRef.Document.Url
-                    }).ToList();
+                        ReferencedBy = document.ReferencedBy.Select(docRef => new ServiceDocumentRef(docRef)).ToList();
+                    }
                 }
             }
 
@@ -168,9 +175,19 @@ namespace WebCrawler.Site
 
         private class ServiceDocumentRef
         {
+            public ServiceDocumentRef(DocumentRef documentRef)
+            {
+                Excerpt = documentRef.Excerpt;
+                SourceDocumentId = documentRef.SourceDocument.Id;
+                TargetDocumentId = documentRef.TargetDocument.Id;
+                SourceDocumentUrl = documentRef.SourceDocument.Url;
+                TargetDocumentUrl = documentRef.TargetDocument.Url;
+            }
+
             public Guid SourceDocumentId { get; set; }
             public Guid TargetDocumentId { get; set; }
             public string SourceDocumentUrl { get; set; }
+            public string TargetDocumentUrl { get; set; }
             public string Excerpt { get; set; }
         }
     }
