@@ -111,4 +111,15 @@
             }
         }
     }
+
+    exportJson() {
+        let json = JSON.stringify(this.documents);
+        var blob = new Blob([json], { type: "text\/json" });
+        var url = URL.createObjectURL(blob);
+
+        let anchor = document.createElement("a");
+        anchor.setAttribute("href", url);
+        anchor.setAttribute("download", "export.json");
+        anchor.click();
+    }
 }

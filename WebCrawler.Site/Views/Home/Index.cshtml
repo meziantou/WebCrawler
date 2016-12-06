@@ -8,6 +8,7 @@
 
     <button id="BtnCrawlStart">Start</button>
     <button id="BtnCrawlStop" disabled="disabled">Stop</button>
+    <button id="BtnCrawlExport" disabled="disabled">Export JSON</button>
 </form>
 
 <div id="DocumentContainer">
@@ -73,12 +74,10 @@
             </div>
         </details>
     </div>
-</script>
-
-@section scripts {
-    <script src="js/crawl.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/handlebars.js/4.0.6/handlebars.min.js"></script>
-    <script>
+</script> @section scripts {
+<script src="js/crawl.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/handlebars.js/4.0.6/handlebars.min.js"></script>
+<script>
         var template = document.getElementById("template").innerHTML;
         Handlebars.registerHelper("statusCodeClass", function (statusCode) {
             if (statusCode >= 200 && statusCode < 300) {
@@ -123,6 +122,7 @@
         var crawler = null;
         var btnStart = document.getElementById("BtnCrawlStart");
         var btnStop = document.getElementById("BtnCrawlStop");
+        var btnExport = document.getElementById("BtnCrawlExport");
         var container = document.getElementById("DocumentContainer");
         var urlInput = document.getElementById("Url");
 
@@ -133,6 +133,7 @@
             container.innerHTML = "";
             btnStart.disabled = true;
             btnStop.disabled = false;
+            btnExport.disabled = false;
 
             var url = urlInput.value;
             localStorage.setItem("lasturl", url);
@@ -149,17 +150,25 @@
 
         btnStop.addEventListener("click", function (e) {
             e.preventDefault();
-            
+
             if (crawler) {
                 crawler.stop();
                 onFinished();
             }
         });
 
+        btnExport.addEventListener("click", function (e) {
+            e.preventDefault();
+
+            if(crawler){
+                crawler.exportJson();
+            }
+        });
+
         function onFinished() {
             btnStart.disabled = false;
             btnStop.disabled = true;
-            crawler = null;
+            //crawler = null;
         }
-    </script>
+</script>
 }
