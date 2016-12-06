@@ -22,5 +22,14 @@ namespace WebCrawler
         public string ErrorMessage { get; set; }
         public string FullErrorMessage { get; set; }
         public string ReasonPhrase { get; set; }
+        public string Language { get; set; }
+
+        public bool IsSame(Document document)
+        {
+            if (document == null)
+                return false;
+
+            return document.Url == Url && document.Language == Language;
+        }
     }
 }

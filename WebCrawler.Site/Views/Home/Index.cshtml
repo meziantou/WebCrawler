@@ -19,7 +19,7 @@
         <details>
             <summary class="document-summary">
                 <span class="status status-{{statusCodeClass StatusCode}}">{{StatusCode}}</span>
-                <span><a target="_blank" href="{{Url}}">{{Url}}</a>{{#if RedirectUrl}}<span class="redirect-separator">➜</span><a target="_blank" href="{{RedirectUrl}}">{{RedirectUrl}}</a>{{/if}}</span>
+                <span><a target="_blank" href="{{Url}}">{{Url}}{{#if Language}}({{Language}}){{/if}}</a>{{#if RedirectUrl}}<span class="redirect-separator">➜</span><a target="_blank" href="{{RedirectUrl}}">{{RedirectUrl}}</a>{{/if}}</span>
             </summary>
 
             <div class="details">
@@ -46,7 +46,7 @@
                         <ul>
                             {{#each References}}
                             <li>
-                                <a href="#Doc-{{TargetDocumentId}}">{{TargetDocumentUrl}}</a>
+                                <a href="#Doc-{{TargetDocumentId}}">{{TargetSourceDocumentUrl}}</a>
                                 <pre><code>{{Excerpt}}</code></pre>
                             </li>
                             {{/each}}
@@ -62,7 +62,7 @@
                         <ul>
                             {{#each ReferencedBy}}
                             <li>
-                                <a href="#Doc-{{SourceDocumentId}}">{{SourceDocumentUrl}}</a>
+                                <a href="#Doc-{{SourceDocumentId}}">{{SourceSourceDocumentUrl}}</a>
                                 <pre><code>{{Excerpt}}</code></pre>
                             </li>
                             {{/each}}

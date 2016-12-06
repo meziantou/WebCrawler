@@ -74,7 +74,7 @@ namespace WebCrawler.Site
             //SendJsonAsync(new
             //{
             //    Type = 2,
-            //    Document = new ServiceDocument(e.Document)
+            //    Document = new ServiceDocument(e.SourceDocument)
             //});
         }
 
@@ -144,6 +144,7 @@ namespace WebCrawler.Site
                 Id = document.Id;
                 Url = document.Url;
                 RedirectUrl = document.RedirectUrl;
+                Language = document.Language;
                 StatusCode = document.StatusCode;
                 CrawledOn = document.CrawledOn;
                 RequestHeaders = document.RequestHeaders;
@@ -161,6 +162,7 @@ namespace WebCrawler.Site
             }
 
             public DateTime CrawledOn { get; }
+            public string Language { get; set; }
             public IDictionary<string, string> RequestHeaders { get; }
             public IDictionary<string, string> ResponseHeaders { get; }
             public Guid Id { get; }

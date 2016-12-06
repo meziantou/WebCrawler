@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,7 +20,7 @@ namespace WebCrawler
     {
         private readonly CrawlerOptions _options;
         private HttpClient _client;
-        private readonly BlockingCollection<DiscoveredUrl> _documentToProcess = new BlockingCollection<DiscoveredUrl>();
+        private readonly BlockingCollection<DiscoveredUrl> _discoveredUrls = new BlockingCollection<DiscoveredUrl>();
         private int _processingThreadCount;
 
         public event EventHandler<DocumentEventArgs> DocumentParsed;
@@ -65,7 +66,7 @@ namespace WebCrawler
             var result = new CrawlResult();
             result.Address = address;
 
-            _documentToProcess.Add(new DiscoveredUrl { Url = address }, ct);
+            _discoveredUrls.Add(new DiscoveredUrl { Url = address }, ct);
 
             var maxConcurrency = _options.MaxConcurrency;
             var tasks = new Task<Task>[maxConcurrency];
@@ -80,7 +81,7 @@ namespace WebCrawler
 
         private async Task ProcessCollectionAsync(CrawlResult result, CancellationToken ct)
         {
-            foreach (var item in _documentToProcess.GetConsumingEnumerable(ct))
+            foreach (var item in _discoveredUrls.GetConsumingEnumerable(ct))
             {
                 Interlocked.Increment(ref _processingThreadCount);
                 try
@@ -90,20 +91,20 @@ namespace WebCrawler
                 finally
                 {
                     Interlocked.Decrement(ref _processingThreadCount);
-                    if (_processingThreadCount == 0 && _documentToProcess.Count == 0)
+                    if (_processingThreadCount == 0 && _discoveredUrls.Count == 0)
                     {
-                        _documentToProcess.CompleteAdding();
+                        _discoveredUrls.CompleteAdding();
                     }
                 }
             }
         }
 
-        private async Task ProcessItemAsync(CrawlResult result, DiscoveredUrl toBeProcessed, CancellationToken ct)
+        private async Task ProcessItemAsync(CrawlResult result, DiscoveredUrl discoveredUrl, CancellationToken ct)
         {
             // Test the domain, same domain as address or external by 1 level 
-            if (!toBeProcessed.IsRedirect && !Utilities.IsSameHost(result.Address, toBeProcessed.Url))
+            if (!discoveredUrl.IsRedirect && !Utilities.IsSameHost(result.Address, discoveredUrl.Url))
             {
-                if (toBeProcessed.Document == null || !Utilities.IsSameHost(result.Address, toBeProcessed.Document.Url))
+                if (discoveredUrl.SourceDocument == null || !Utilities.IsSameHost(result.Address, discoveredUrl.SourceDocument.Url))
                     return;
             }
 
@@ -111,31 +112,31 @@ namespace WebCrawler
             Document existingDocument;
             lock (result.Documents)
             {
-                existingDocument = result.Documents.FirstOrDefault(d => d.Url == toBeProcessed.Url);
+                existingDocument = result.Documents.FirstOrDefault(d => discoveredUrl.IsSame(d));
             }
 
             if (existingDocument != null)
             {
-                DocumentRef documentRef = new DocumentRef();
-                documentRef.SourceDocument = toBeProcessed.Document;
-                documentRef.TargetDocument = existingDocument;
-                documentRef.Excerpt = toBeProcessed.Excerpt;
-                lock (existingDocument.ReferencedBy)
-                {
-                    existingDocument.ReferencedBy.Add(documentRef);
-                }
-
-                OnDocumentRefAdded(documentRef);
-                OnDocumentUpdated(existingDocument);
+                AddReference(discoveredUrl, existingDocument);
                 return;
             }
 
-            var doc = await GetAsync(toBeProcessed.Url, ct).ConfigureAwait(false);
-            if (toBeProcessed.Document != null)
+            var doc = await GetAsync(discoveredUrl, ct).ConfigureAwait(false);
+            lock (result.Documents)
+            {
+                existingDocument = result.Documents.FirstOrDefault(d => doc.IsSame(d)); // Another thread as processed the same URL at the same time
+                if (existingDocument != null)
+                {
+                    AddReference(discoveredUrl, existingDocument);
+                    return;
+                }
+            }
+
+            if (discoveredUrl.SourceDocument != null)
             {
                 lock (doc.ReferencedBy)
                 {
-                    doc.ReferencedBy.Add(new DocumentRef { TargetDocument = doc, SourceDocument = toBeProcessed.Document, Excerpt = toBeProcessed.Excerpt });
+                    doc.ReferencedBy.Add(new DocumentRef { TargetDocument = doc, SourceDocument = discoveredUrl.SourceDocument, Excerpt = discoveredUrl.Excerpt });
                 }
             }
 
@@ -147,41 +148,65 @@ namespace WebCrawler
             OnDocumentParsed(doc);
         }
 
-        private async Task<Document> GetAsync(string address, CancellationToken ct = default(CancellationToken))
+        private void AddReference(DiscoveredUrl toBeProcessed, Document existingDocument)
+        {
+            var documentRef = new DocumentRef();
+            documentRef.SourceDocument = toBeProcessed.SourceDocument;
+            documentRef.TargetDocument = existingDocument;
+            documentRef.Excerpt = toBeProcessed.Excerpt;
+            lock (existingDocument.ReferencedBy)
+            {
+                existingDocument.ReferencedBy.Add(documentRef);
+            }
+
+            OnDocumentRefAdded(documentRef);
+            OnDocumentUpdated(existingDocument);
+        }
+
+        private async Task<Document> GetAsync(DiscoveredUrl discoveredUrl, CancellationToken ct = default(CancellationToken))
         {
             var doc = new Document();
             doc.CrawledOn = DateTime.UtcNow;
-            doc.Url = address;
+            doc.Url = discoveredUrl.Url;
+            doc.Language = discoveredUrl.Language;
             try
             {
-                using (var response = await _client.GetAsync(address, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false))
+                using (var requestMessage = new HttpRequestMessage(HttpMethod.Get, doc.Url))
                 {
-                    doc.StatusCode = response.StatusCode;
-                    doc.ReasonPhrase = response.ReasonPhrase;
-                    doc.RequestHeaders = Combine(CloneHeaders(response.RequestMessage.Headers), CloneHeaders(response.RequestMessage.Content?.Headers));
-                    doc.ResponseHeaders = Combine(CloneHeaders(response.Headers), CloneHeaders(response.Content?.Headers));
-
-                    if (Utilities.IsRedirect(response.StatusCode))
+                    if (discoveredUrl.Language != null)
                     {
-                        if (response.Headers.TryGetValues("Location", out var locationHeader))
-                        {
-                            var location = locationHeader.FirstOrDefault();
-                            doc.RedirectUrl = new Url(new Url(address), location).Href;
-                            EnqueueRedirect(doc, doc.RedirectUrl, ct);
-                        }
+                        requestMessage.Headers.AcceptLanguage.Add(new StringWithQualityHeaderValue(doc.Language));
                     }
-                    else
+
+                    using (var response = await _client.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false))
                     {
-                        if (response.Content != null)
+                        doc.StatusCode = response.StatusCode;
+                        doc.ReasonPhrase = response.ReasonPhrase;
+                        doc.RequestHeaders = Combine(CloneHeaders(response.RequestMessage.Headers), CloneHeaders(response.RequestMessage.Content?.Headers));
+                        doc.ResponseHeaders = Combine(CloneHeaders(response.Headers), CloneHeaders(response.Content?.Headers));
+
+                        if (Utilities.IsRedirect(response.StatusCode))
                         {
-                            var contentType = response.Content?.Headers.ContentType?.MediaType;
-                            if (contentType == null || Utilities.IsHtmlMimeType(contentType))
+                            if (response.Headers.TryGetValues("Location", out var locationHeader))
                             {
-                                await HandleHtmlAsync(doc, response, ct).ConfigureAwait(false);
+                                var location = locationHeader.FirstOrDefault();
+                                doc.RedirectUrl = new Url(new Url(doc.Url), location).Href;
+                                EnqueueRedirect(doc, doc.RedirectUrl, ct);
                             }
-                            else if (Utilities.IsCssMimeType(contentType))
+                        }
+                        else
+                        {
+                            if (response.Content != null)
                             {
-                                await HandleCssAsync(doc, response, ct).ConfigureAwait(false);
+                                var contentType = response.Content?.Headers.ContentType?.MediaType;
+                                if (contentType == null || Utilities.IsHtmlMimeType(contentType))
+                                {
+                                    await HandleHtmlAsync(doc, response, ct).ConfigureAwait(false);
+                                }
+                                else if (Utilities.IsCssMimeType(contentType))
+                                {
+                                    await HandleCssAsync(doc, response, ct).ConfigureAwait(false);
+                                }
                             }
                         }
                     }
@@ -245,6 +270,17 @@ namespace WebCrawler
                 }
                 else if (node is IHtmlLinkElement linkElement)
                 {
+                    // <link href="/" rel="alternate" hreflang="es">
+
+                    if (string.Equals(linkElement.Relation, "alternate", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var lang = linkElement.GetAttribute("hreflang");
+                        if (!string.IsNullOrEmpty(lang))
+                        {
+                            Enqueue(document, linkElement.Href, lang, node, ct);
+                        }
+                    }
+
                     Enqueue(document, linkElement.Href, node, ct);
                 }
                 else if (node is IHtmlImageElement imageElement)
@@ -347,7 +383,7 @@ namespace WebCrawler
             }
         }
 
-        private void Enqueue(Document document, string url, string excerpt, CancellationToken ct)
+        private void Enqueue(Document document, string url, string language, string excerpt, CancellationToken ct)
         {
             if (!MustProcessUrl(url))
                 return;
@@ -358,21 +394,28 @@ namespace WebCrawler
 
             var discoveredUrl = new DiscoveredUrl();
             discoveredUrl.Url = parsedUrl.Href;
-            discoveredUrl.Document = document;
+            discoveredUrl.Language = language;
+            discoveredUrl.SourceDocument = document;
             discoveredUrl.Excerpt = excerpt;
 
-            _documentToProcess.Add(discoveredUrl, ct);
+            _discoveredUrls.Add(discoveredUrl, ct);
         }
 
         private void Enqueue(Document document, string url, IElement node, CancellationToken ct)
         {
             var fullUrl = new Url(node.BaseUrl, url);
-            Enqueue(document, fullUrl.Href, GetExcerpt(node), ct);
+            Enqueue(document, fullUrl.Href, null, GetExcerpt(node), ct);
+        }
+
+        private void Enqueue(Document document, string url, string language, IElement node, CancellationToken ct)
+        {
+            var fullUrl = new Url(node.BaseUrl, url);
+            Enqueue(document, fullUrl.Href, language, GetExcerpt(node), ct);
         }
 
         private void Enqueue(Document document, string url, ICssNode node, CancellationToken ct)
         {
-            Enqueue(document, url, GetExcerpt(node), ct);
+            Enqueue(document, url, null, GetExcerpt(node), ct);
         }
 
         private void EnqueueRedirect(Document document, string url, CancellationToken ct)
@@ -387,11 +430,11 @@ namespace WebCrawler
             var discoveredUrl = new DiscoveredUrl
             {
                 Url = parsedUrl.Href,
-                Document = document,
+                SourceDocument = document,
                 IsRedirect = true
             };
 
-            _documentToProcess.Add(discoveredUrl, ct);
+            _discoveredUrls.Add(discoveredUrl, ct);
         }
 
         private bool MustProcessUrl(string url)
