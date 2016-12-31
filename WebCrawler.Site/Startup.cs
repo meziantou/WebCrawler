@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -46,9 +47,16 @@ namespace WebCrawler.Site
                 app.UseExceptionHandler("/Home/Error");
             }
 
-            app.UseStaticFiles();
-
-
+            // allow tsx file to be sent to browser (debug)
+            var fileExtensionContentTypeProvider = new FileExtensionContentTypeProvider();
+            fileExtensionContentTypeProvider.Mappings["tsx"] = "text/tscript";
+            app.UseStaticFiles(new StaticFileOptions()
+            {
+                ContentTypeProvider = fileExtensionContentTypeProvider,
+                ServeUnknownFileTypes = true
+            });
+            
+            // Let's encrypt
             var wellKnownDirectory = Path.Combine(Directory.GetCurrentDirectory(), @".well-known");
             if (!Directory.Exists(wellKnownDirectory))
             {

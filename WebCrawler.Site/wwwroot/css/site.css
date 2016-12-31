@@ -1,44 +1,71 @@
-﻿#DocumentContainer {
-    margin-top: 20px;
+﻿.hide {
+    display: none;
 }
 
-.details {
+.navbar-full {
+    margin-bottom: 15px;
+}
+
+#BtnCrawlStart:not(:disabled) .fa {
+    display: none;
+}
+
+.document-details {
     margin-left: 60px;
 }
 
-    .details pre {
+    .document-details pre {
         margin: 0.3em 0 1em;
+        overflow: auto;
+    }
+
+.documents {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+}
+
+.documents-list {
+    flex-grow: 0;
+    flex-shrink: 1;
+    margin-right: 5px;
+    overflow: hidden;
+    min-width: 25%;
+}
+
+.document-details {
+    flex-grow: 1;
+    flex-shrink: 0;
+    flex-basis: 50%;
+    overflow: hidden;
+    margin-left: 5px;
+}
+
+    .document-details .summary {
+        margin-bottom: 10px;
     }
 
 .document {
-    margin-bottom: 5px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
-.status {
-    border-radius: 5px;
-    padding: 0 5px;
+    .document .tag {
+        margin-right: 5px;
+    }
+
+pre {
+    background-color: #f7f7f9;
 }
 
-.status-ok {
-    background-color: limegreen;
+details .details {
+    margin-top: 10px;
+    margin-bottom: 10px;
 }
 
-.status-redirect {
-    background-color: orange;
-}
-
-.status-error {
-    background-color: orangered;
-}
-
-:target {
-    background-color: antiquewhite;
-}
-
-.redirect-separator {
-    color: orange;
-}
-
-.error-message {
-    color: red;
+details .details > pre {
+    margin-top: 0;
+    margin-bottom: 0;
 }

@@ -56,7 +56,17 @@ namespace WebCrawler
             };
 
             _client = new HttpClient(handler, true);
-            _client.DefaultRequestHeaders.Add("User-Agent", _options.UserAgent);
+            _client.DefaultRequestHeaders.CacheControl = new CacheControlHeaderValue { NoCache = true };
+
+            if (!string.IsNullOrEmpty(_options.UserAgent))
+            {
+                _client.DefaultRequestHeaders.Add("User-Agent", _options.UserAgent);
+            }
+
+            if (!string.IsNullOrEmpty(_options.DefaultAcceptLanguage))
+            {
+                _client.DefaultRequestHeaders.Add("Accept-Language", _options.DefaultAcceptLanguage);
+            }
         }
 
         private IEnumerable<string> GetRootUrls(string value)
@@ -133,15 +143,39 @@ namespace WebCrawler
             return false;
         }
 
+        private bool MustProcess(CrawlResult result, DiscoveredUrl discoveredUrl)
+        {
+            if (discoveredUrl.SourceDocument == null) // root page
+                return true;
+
+            if (discoveredUrl.IsRedirect) // we go to the redicted page
+                return true;
+
+            var isSameHost = IsSameHost(result, discoveredUrl.Url);
+            if (!isSameHost && IsSameHost(result, discoveredUrl.SourceDocument.Url)) // External link by one level
+                return true;
+
+            if (isSameHost) // same domain
+                return true;
+
+            if (_options.Includes != null)
+            {
+                foreach (var include in _options.Includes)
+                {
+                    if (include.IsMatch(discoveredUrl.Url))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
         private async Task ProcessItemAsync(CrawlResult result, DiscoveredUrl discoveredUrl, CancellationToken ct)
         {
             // Test the domain, same domain as start url or external by 1 level 
-            if (!discoveredUrl.IsRedirect && !IsSameHost(result, discoveredUrl.Url))
-            {
-                if (discoveredUrl.SourceDocument == null || !IsSameHost(result, discoveredUrl.SourceDocument.Url))
-                    return;
-            }
-
+            if (!MustProcess(result, discoveredUrl))
+                return;
+            
             // Already processed
             Document existingDocument;
             lock (result.Documents)
@@ -211,6 +245,8 @@ namespace WebCrawler
             {
                 using (var requestMessage = new HttpRequestMessage(HttpMethod.Get, doc.Url))
                 {
+                    requestMessage.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("*/*"));
+
                     if (discoveredUrl.Language != null)
                     {
                         requestMessage.Headers.AcceptLanguage.Add(new StringWithQualityHeaderValue(doc.Language));
@@ -423,7 +459,7 @@ namespace WebCrawler
 
         private void Enqueue(Document document, string url, string language, string excerpt, CancellationToken ct)
         {
-            if (!MustProcessUrl(url))
+            if (!MustEnqueueUrl(url))
                 return;
 
             // Remove fragment
@@ -458,7 +494,7 @@ namespace WebCrawler
 
         private void EnqueueRedirect(Document document, string url, CancellationToken ct)
         {
-            if (!MustProcessUrl(url))
+            if (!MustEnqueueUrl(url))
                 return;
 
             // Remove fragment
@@ -475,7 +511,7 @@ namespace WebCrawler
             _discoveredUrls.Add(discoveredUrl, ct);
         }
 
-        private bool MustProcessUrl(string url)
+        private bool MustEnqueueUrl(string url)
         {
             return IsHttpProtocol(url);
         }

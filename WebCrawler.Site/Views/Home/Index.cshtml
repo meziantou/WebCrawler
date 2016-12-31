@@ -1,199 +1,44 @@
-﻿<h1>Web crawler</h1>
+﻿<form>
+    <p>Enter the URL or a list of URLs (comma-separated) you want to explore.</p>
 
-<form>
-    <div>
+    <div class="form-group">
         <label for="Url">Url</label>
-        <input id="Url" type="url" />
+        <input id="Url" type="url" class="form-control" placeholder="www.meziantou.net"/>
     </div>
 
-    <button id="BtnCrawlStart">Start</button>
-    <button id="BtnCrawlStop" disabled="disabled">Stop</button>
-    <button id="BtnCrawlExport" disabled="disabled">Export JSON</button>
-    <button id="BtnCrawlComputeReferences" disabled="disabled">Compute References</button>
+    <div class="form-group">
+        <label for="UrlIncludePatterns">Includes patterns (regex, one per line)</label>
+        <textarea id="UrlIncludePatterns" class="form-control"></textarea>
+    </div>
+
+    <button id="BtnCrawlStart" class="btn btn-primary"><i class="fa fa-spinner fa-spin"></i> Start</button>
+    <button id="BtnCrawlStop" class="btn btn-danger">Stop</button>
+    <button id="BtnCrawlExport" class="btn btn-default">Export JSON</button>
+    <button id="BtnCrawlComputeReferences" class="btn btn-default">Compute References</button>
 </form>
 
-<div id="DocumentContainer"></div>
+<hr/>
 
-<script id="template" type="text/x-handlebars-template">
-    <div class="document" id="Doc-{{Id}}" data-document-id="{{Id}}">
-        <details>
-            <summary class="document-summary" title="Crawled on {{CrawledOn}}">
-                <span class="status status-{{statusCodeClass StatusCode}}">{{StatusCode}}</span>
-                <span><a target="_blank" href="{{Url}}">{{Url}}{{#if Language}}({{Language}}){{/if}}</a>{{#if RedirectUrl}}<span class="redirect-separator">➜</span><a target="_blank" href="{{RedirectUrl}}">{{RedirectUrl}}</a>{{/if}}</span>
-            </summary>
-
-            <div class="details">
-                <div>                    
-                    {{#if ReasonPhrase}}
-                    <br />{{StatusCode}} {{ReasonPhrase}}
-                    {{/if}}
-                </div>
-
-                <div class="error-message"><pre title="{{FullErrorMessage}}">{{ErrorMessage}}</pre></div>
-                <div class="headers">
-                    <details>
-                        <summary>Request Headers ({{objectLength RequestHeaders}})</summary>
-                        <pre>{{objectPre RequestHeaders}}</pre>
-                    </details>
-                </div>
-
-                <div class="headers">
-                    <details>
-                        <summary>Response Headers ({{objectLength ResponseHeaders}})</summary>
-                        <pre>{{objectPre ResponseHeaders}}</pre>
-                    </details>
-                </div>
-
-                {{#if References}}
-                <div class="links">
-                    <details>
-                        <summary>Links ({{References.length}})</summary>
-                        <ul>
-                            {{#each References}}
-                            <li>
-                                <a href="#Doc-{{TargetDocumentId}}">{{TargetDocumentUrl}}</a>
-                                <pre><code>{{Excerpt}}</code></pre>
-                            </li>
-                            {{/each}}
-                        </ul>
-                    </details>
-                </div>
-                {{/if}}
-
-                {{#if ReferencedBy}}
-                <div class="referenced-by">
-                    <details>
-                        <summary>Referenced by ({{ReferencedBy.length}})</summary>
-                        <ul>
-                            {{#each ReferencedBy}}
-                            <li>
-                                <a href="#Doc-{{SourceDocumentId}}">{{SourceDocumentUrl}}</a>
-                                <pre><code>{{Excerpt}}</code></pre>
-                            </li>
-                            {{/each}}
-                        </ul>
-                    </details>
-                </div>
-                {{/if}}
-            </div>
-        </details>
+<div class="documents">
+    <div class="card hide documents-list" id="DocumentListContainer">
+        <div class="card-block">
+            <h4 class="card-title">Requests <small>(<span id="DocumentCount">0</span>)</small></h4>
+            <div id="DocumentList"></div>
+        </div>
     </div>
-</script> @section scripts {
-<script src="js/crawl.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/handlebars.js/4.0.6/handlebars.min.js"></script>
+    
+    <div class="card hide document-details" id="DocumentDetailsContainer">
+        <div class="card-block">
+            <h4 class="card-title">Details <a href="#" class="float-xs-right"><i class="fa fa-times"></i></a></h4>
+            <div id="DocumentDetails"></div>
+        </div>
+    </div>
+</div>
+
+@section scripts {
+<script src="js/webcrawler.js"></script>
 <script>
-    var template = document.getElementById("template").innerHTML;
-    Handlebars.registerHelper("statusCodeClass", function (statusCode) {
-        if (statusCode >= 200 && statusCode < 300) {
-            return "ok";
-        }
-
-        if (statusCode >= 300 && statusCode < 400) {
-            return "redirect";
-        }
-
-        return "error";
-    });
-
-    Handlebars.registerHelper("objectLength", function (obj) {
-        if (obj) {
-            return Object.keys(obj).length;
-        }
-
-        return 0;
-    });
-
-    Handlebars.registerHelper("objectPre", function (obj) {
-        if (obj) {
-            let str = "";
-            for (let key of Object.keys(obj)) {
-                if (str) {
-                    str += "\r\n";
-                }
-
-                str += key + ": " + obj[key];
-            }
-
-            return str;
-        }
-
-        return null;
-    });
-
-    var compiledTemplate = Handlebars.compile(template);
-
-    // Handle events
-    var crawler = null;
-    var btnStart = document.getElementById("BtnCrawlStart");
-    var btnStop = document.getElementById("BtnCrawlStop");
-    var btnExport = document.getElementById("BtnCrawlExport");
-    var btnComputeReferences = document.getElementById("BtnCrawlComputeReferences");
-    var container = document.getElementById("DocumentContainer");
-    var urlInput = document.getElementById("Url");
-
-    let lastUrl = localStorage.getItem("lasturl");
-    if (document.location.search) {
-        let search = new URLSearchParams(document.location.search);
-        let url = search.get("url");
-        if (url) {
-            lastUrl = url;
-        }
-    }
-
-    urlInput.value = lastUrl;
-
-    btnStart.addEventListener("click", function (e) {
-        e.preventDefault();
-        container.innerHTML = "";
-        btnStart.disabled = true;
-        btnStop.disabled = false;
-        btnExport.disabled = false;
-        btnComputeReferences.disabled = false;
-
-        var url = urlInput.value;
-        localStorage.setItem("lasturl", url);
-
-        // Start web listener
-        crawler = new WebCrawler({
-            url: url,
-            documentTemplate: compiledTemplate,
-            container: container,
-            onFinished: onFinished
-        });
-        crawler.start();
-    });
-
-    btnStop.addEventListener("click", function (e) {
-        e.preventDefault();
-
-        if (crawler) {
-            crawler.stop();
-            onFinished();
-        }
-    });
-
-    btnExport.addEventListener("click", function (e) {
-        e.preventDefault();
-
-        if (crawler) {
-            crawler.exportJson();
-        }
-    });
-
-    btnComputeReferences.addEventListener("click", function (e) {
-        e.preventDefault();
-
-        if (crawler) {
-            crawler.computeReferences();
-            crawler.renderAll();
-        }
-    });
-
-    function onFinished() {
-        btnStart.disabled = false;
-        btnStop.disabled = true;
-        btnComputeReferences.disabled = true;
-        //crawler = null;
-    }
+    var crawler = new WebCrawler.Crawler();
+    crawler.loadConfiguration();
 </script>
 }

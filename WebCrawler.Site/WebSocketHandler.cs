@@ -9,12 +9,15 @@ using Newtonsoft.Json;
 using System.Net;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
+using Newtonsoft.Json.Serialization;
 
 namespace WebCrawler.Site
 {
     public class WebSocketHandler
     {
         private readonly WebSocket _socket;
+        private readonly SemaphoreSlim _semaphoreSlim = new SemaphoreSlim(1, 1);
 
         private WebSocketHandler(WebSocket socket)
         {
@@ -26,7 +29,7 @@ namespace WebCrawler.Site
         {
             if (!httpContext.WebSockets.IsWebSocketRequest)
                 return;
-            
+
             using (var socket = await httpContext.WebSockets.AcceptWebSocketAsync())
             {
                 var handler = new WebSocketHandler(socket);
@@ -43,8 +46,24 @@ namespace WebCrawler.Site
                 return;
             }
 
+            var options = new CrawlerOptions();
+            if (!string.IsNullOrWhiteSpace(data.UrlIncludePatterns))
+            {
+                using (var reader = new StringReader(data.UrlIncludePatterns))
+                {
+                    string line;
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        if (string.IsNullOrWhiteSpace(line))
+                            continue;
 
-            using (var crawler = new Crawler())
+                        var regex = new Regex(line, RegexOptions.IgnoreCase | RegexOptions.Compiled);
+                        options.Includes.Add(regex);
+                    }
+                }
+            }
+
+            using (var crawler = new Crawler(options))
             {
                 crawler.DocumentParsed += async (sender, e) =>
                 {
@@ -60,7 +79,7 @@ namespace WebCrawler.Site
                 {
                     await SendJsonAsync(new
                     {
-                        Type = 4,
+                        Type = 2,
                         DocumentRef = new ServiceDocumentRef(e.DocumentRef)
                     }, ct);
                 };
@@ -80,20 +99,37 @@ namespace WebCrawler.Site
             }
         }
 
-        private Task SendJsonAsync(object data, CancellationToken ct = default(CancellationToken))
+        private JsonSerializerSettings CreateJsonSettings()
+        {
+            return new JsonSerializerSettings()
+            {
+                ContractResolver = new CamelCasePropertyNamesContractResolver()
+            };
+        }
+
+        private async Task SendJsonAsync(object data, CancellationToken ct = default(CancellationToken))
         {
             ct.ThrowIfCancellationRequested();
 
-            var json = JsonConvert.SerializeObject(data);
+            var json = JsonConvert.SerializeObject(data, CreateJsonSettings());
             var buffer = Encoding.UTF8.GetBytes(json);
             var segment = new ArraySegment<byte>(buffer);
-            return _socket.SendAsync(segment, WebSocketMessageType.Text, true, ct);
+
+            await _semaphoreSlim.WaitAsync(ct);
+            try
+            {
+                await _socket.SendAsync(segment, WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                _semaphoreSlim.Release();
+            }
         }
 
         private async Task<T> ReceiveJsonAsync<T>(CancellationToken ct)
         {
             var json = await ReceiveStringAsync(ct);
-            return JsonConvert.DeserializeObject<T>(json);
+            return JsonConvert.DeserializeObject<T>(json, CreateJsonSettings());
         }
 
         private async Task<string> ReceiveStringAsync(CancellationToken ct = default(CancellationToken))
@@ -125,6 +161,7 @@ namespace WebCrawler.Site
         private class StartCrawlingArgs
         {
             public string Url { get; set; }
+            public string UrlIncludePatterns { get; set; }
         }
 
         private class ServiceDocument
