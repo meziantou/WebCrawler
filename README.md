@@ -30,7 +30,7 @@ For CSS files, URLs are extracted from:
 You can deploy the website on Azure for free:
 
 1. Create a free Web App
-2. Enable WebSockets in Application Settings ([section "Azure Hosting"](http://www.softfluent.com/blog/dev/2016/12/11/Using-Web-Sockets-with-ASP-NET-Core))
+2. Enable WebSockets in Application Settings ([Introduction to WebSockets on Windows Azure Web Sites](https://azure.microsoft.com/fr-fr/blog/introduction-to-websockets-on-windows-azure-web-sites/), [Using Web Sockets with ASP.NET Core](http://www.softfluent.com/blog/dev/2016/12/11/Using-Web-Sockets-with-ASP-NET-Core))
 3. Deploy the website using WebDeploy or FTP
 
 ## Blog posts
@@ -38,4 +38,4 @@ You can deploy the website on Azure for free:
 Some parts of the code are explained in blog posts:
 - [Easily generate dynamic html using TSX](http://www.softfluent.com/blog/dev/2016/12/15/Easily-generate-dynamic-html-using-TSX)
 - [Using Web Sockets with ASP.NET Core](http://www.softfluent.com/blog/dev/2016/12/11/Using-Web-Sockets-with-ASP-NET-Core)
-- [Using Let’s encrypt with ASP.NET Core](http://www.softfluent.com/blog/dev/2016/11/09/Using-Let-s-encrypt-with-ASP-NET-Core)
+- [Using Letâ€™s encrypt with ASP.NET Core](http://www.softfluent.com/blog/dev/2016/11/09/Using-Let-s-encrypt-with-ASP-NET-Core)
