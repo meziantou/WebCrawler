@@ -49,14 +49,17 @@ namespace WebCrawler
 
         private void EnsureHttpClient()
         {
-            var handler = new HttpClientHandler
+            var handler = new HttpClientHandler()
             {
                 AllowAutoRedirect = false,
                 ClientCertificateOptions = ClientCertificateOption.Manual,
-                CheckCertificateRevocationList = true,
+                CheckCertificateRevocationList = true
             };
 
-            _client = new HttpClient(handler, true);
+            var retryHandler = new RetryDelegatingHandler(handler);
+            
+
+            _client = new HttpClient(retryHandler, true);
             _client.DefaultRequestHeaders.CacheControl = new CacheControlHeaderValue { NoCache = true };
 
             if (!string.IsNullOrEmpty(_options.UserAgent))
