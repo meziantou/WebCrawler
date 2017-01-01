@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using AngleSharp;
 using AngleSharp.Dom;
 using AngleSharp.Dom.Css;
+using AngleSharp.Dom.Events;
 using AngleSharp.Dom.Html;
 using AngleSharp.Extensions;
 using AngleSharp.Parser.Css;
@@ -175,7 +176,7 @@ namespace WebCrawler
             // Test the domain, same domain as start url or external by 1 level 
             if (!MustProcess(result, discoveredUrl))
                 return;
-            
+
             // Already processed
             Document existingDocument;
             lock (result.Documents)
@@ -317,6 +318,27 @@ namespace WebCrawler
                 .WithLocaleBasedEncoding();
 
             var browsingContext = BrowsingContext.New(config);
+            browsingContext.ParseError += (sender, e) =>
+            {
+                var ev = e as HtmlErrorEvent;
+                if (ev != null)
+                {
+                    var error = new HtmlError();
+                    error.Column = ev.Position.Column;
+                    error.Position = ev.Position.Position;
+                    error.Line = ev.Position.Line;
+                    error.Message = ev.Message;
+                    error.Code = ev.Code;
+
+                    var excerptStart = Math.Max(0, (error.Position - 1) - 50);
+                    var excerptEnd = Math.Min(content.Length, (error.Position - 1) + 50);
+                    error.Excerpt = content.Substring(excerptStart, excerptEnd - excerptStart);
+                    error.ExcerptPosition = error.Position - excerptStart;
+
+                    document.HtmlErrors.Add(error);
+                }
+            };
+
             var htmlDocument = await browsingContext.OpenAsync(action => action.Address(document.Url).Content(content).Headers(response.Headers).Status(response.StatusCode), ct).ConfigureAwait(false);
 
             document.Title = htmlDocument.Title;

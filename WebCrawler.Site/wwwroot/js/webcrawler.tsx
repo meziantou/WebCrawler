@@ -2,8 +2,8 @@
     interface Document {
         crawledOn: Date;
         language: string;
-        requestHeaders: Headers;
-        responseHeaders: Headers;
+        requestHeaders: Headers | null;
+        responseHeaders: Headers | null;
         id: string;
         redirectUrl: string;
         statusCode: number;
@@ -13,6 +13,7 @@
         reasonPhrase: string;
         referencedBy: DocumentRef[];
         references: DocumentRef[];
+        htmlErrors: HtmlError[];
     }
 
     interface DocumentRef {
@@ -21,6 +22,16 @@
         sourceDocumentUrl: string;
         targetDocumentUrl: string;
         excerpt: string;
+    }
+
+    interface HtmlError {
+        excerpt: string;
+        excerptPosition: number;
+        position: number;
+        line: number;
+        column: number;
+        message: string;
+        code: number;
     }
 
     interface SocketMessage {
@@ -323,14 +334,14 @@
                             {document.redirectUrl && <div>➜ <a href={`#documentUrl=${encodeURIComponent(document.redirectUrl)}`}>{document.redirectUrl}</a></div>}
                             <div><span className={`tag tag-${this.getStatusCodeClass(document)}`}>{document.statusCode}</span> {document.reasonPhrase}</div>
                         </div>
-                        <details>
+                        <details className={document.requestHeaders ? "" : "hide"}>
                             <summary>Request Headers</summary>
                             <div className="details">
                                 <pre><code>{this.formatHeaders(document.requestHeaders)}</code></pre>
                             </div>
                         </details>
 
-                        <details>
+                        <details className={document.responseHeaders ? "" : "hide"}>
                             <summary>Response Headers</summary>
                             <div className="details">
                                 <pre><code>{this.formatHeaders(document.responseHeaders)}</code></pre>
@@ -345,8 +356,7 @@
                                     {document.references.map(ref =>
                                         <li>
                                             <details>
-                                                <summary><a href={`#documentId=${ref.targetDocumentId}`}>{ref
-                                                    .targetDocumentUrl}</a></summary>
+                                                <summary><a href={`#documentId=${ref.targetDocumentId}`}>{ref.targetDocumentUrl}</a></summary>
                                                 <pre><code>{ref.excerpt}</code></pre>
                                             </details>
                                         </li>
@@ -370,10 +380,40 @@
                                 </ul>
                             </div>
                         </details>
+
+                        <details className={document.htmlErrors.length > 0 ? "" : "hide"}>
+                            <summary>HTML Errors ({document.htmlErrors.length})</summary>
+                            <div className="details">
+                                <ul>
+                                    {document.htmlErrors.map(htmlError =>
+                                        <li>
+                                            <details>
+                                                <summary>Line {htmlError.line}, Column {htmlError.column}: {htmlError.message}</summary>
+                                                <pre><code>{this.getErrorExcerpt(htmlError)}</code></pre>
+                                            </details>
+                                        </li>
+                                    )}
+                                </ul>
+                            </div>
+                        </details>
                     </div>;
             }
 
             return result;
+        }
+
+        private getErrorExcerpt(error: HtmlError) {
+            const excerptPosition = error.excerptPosition - 1;
+            const before = this.replaceNewLines(error.excerpt.substring(0, excerptPosition));
+            const current = this.replaceNewLines(error.excerpt.substring(excerptPosition, excerptPosition + 1));
+            const after = this.replaceNewLines(error.excerpt.substring(excerptPosition + 1));
+            return <span>{before}<span className="code-error">{current}</span>{after}</span>;
+        }
+
+        private replaceNewLines(str: string) {
+            return str
+                .replace(/\r\n/g, "↩")
+                .replace(/\r|\n/g, "↩");
         }
 
         private getStatusCodeClass(document: Document) {
@@ -405,17 +445,19 @@
             return statusCode < 200 || statusCode >= 400;
         }
 
-        private formatHeaders(headers: Headers) {
+        private formatHeaders(headers: Headers | null) {
             let result = "";
 
-            for (let key of Object.keys(headers)) {
-                const value: any = headers[key];
+            if (headers) {
+                for (let key of Object.keys(headers)) {
+                    const value: any = headers[key];
 
-                if (result !== "") {
-                    result += "\n";
+                    if (result !== "") {
+                        result += "\n";
+                    }
+
+                    result += `${key}: ${value}`;
                 }
-
-                result += `${key}: ${value}`;
             }
 
             return result;

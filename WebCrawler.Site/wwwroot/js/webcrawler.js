@@ -241,12 +241,12 @@ var WebCrawler;
                                 JSX.createElement("span", { className: `tag tag-${this.getStatusCodeClass(document)}` }, document.statusCode),
                                 " ",
                                 document.reasonPhrase)),
-                        JSX.createElement("details", null,
+                        JSX.createElement("details", { className: document.requestHeaders ? "" : "hide" },
                             JSX.createElement("summary", null, "Request Headers"),
                             JSX.createElement("div", { className: "details" },
                                 JSX.createElement("pre", null,
                                     JSX.createElement("code", null, this.formatHeaders(document.requestHeaders))))),
-                        JSX.createElement("details", null,
+                        JSX.createElement("details", { className: document.responseHeaders ? "" : "hide" },
                             JSX.createElement("summary", null, "Response Headers"),
                             JSX.createElement("div", { className: "details" },
                                 JSX.createElement("pre", null,
@@ -260,8 +260,7 @@ var WebCrawler;
                                 JSX.createElement("ul", null, document.references.map(ref => JSX.createElement("li", null,
                                     JSX.createElement("details", null,
                                         JSX.createElement("summary", null,
-                                            JSX.createElement("a", { href: `#documentId=${ref.targetDocumentId}` }, ref
-                                                .targetDocumentUrl)),
+                                            JSX.createElement("a", { href: `#documentId=${ref.targetDocumentId}` }, ref.targetDocumentUrl)),
                                         JSX.createElement("pre", null,
                                             JSX.createElement("code", null, ref.excerpt)))))))),
                         JSX.createElement("details", null,
@@ -275,9 +274,41 @@ var WebCrawler;
                                         JSX.createElement("summary", null,
                                             JSX.createElement("a", { href: `#documentId=${ref.sourceDocumentId}` }, ref.sourceDocumentUrl)),
                                         JSX.createElement("pre", null,
-                                            JSX.createElement("code", null, ref.excerpt)))))))));
+                                            JSX.createElement("code", null, ref.excerpt)))))))),
+                        JSX.createElement("details", { className: document.htmlErrors.length > 0 ? "" : "hide" },
+                            JSX.createElement("summary", null,
+                                "HTML Errors (",
+                                document.htmlErrors.length,
+                                ")"),
+                            JSX.createElement("div", { className: "details" },
+                                JSX.createElement("ul", null, document.htmlErrors.map(htmlError => JSX.createElement("li", null,
+                                    JSX.createElement("details", null,
+                                        JSX.createElement("summary", null,
+                                            "Line ",
+                                            htmlError.line,
+                                            ", Column ",
+                                            htmlError.column,
+                                            ": ",
+                                            htmlError.message),
+                                        JSX.createElement("pre", null,
+                                            JSX.createElement("code", null, this.getErrorExcerpt(htmlError))))))))));
             }
             return result;
+        }
+        getErrorExcerpt(error) {
+            const excerptPosition = error.excerptPosition - 1;
+            const before = this.replaceNewLines(error.excerpt.substring(0, excerptPosition));
+            const current = this.replaceNewLines(error.excerpt.substring(excerptPosition, excerptPosition + 1));
+            const after = this.replaceNewLines(error.excerpt.substring(excerptPosition + 1));
+            return JSX.createElement("span", null,
+                before,
+                JSX.createElement("span", { className: "code-error" }, current),
+                after);
+        }
+        replaceNewLines(str) {
+            return str
+                .replace(/\r\n/g, "↩")
+                .replace(/\r|\n/g, "↩");
         }
         getStatusCodeClass(document) {
             const statusCode = document.statusCode;
@@ -303,12 +334,14 @@ var WebCrawler;
         }
         formatHeaders(headers) {
             let result = "";
-            for (let key of Object.keys(headers)) {
-                const value = headers[key];
-                if (result !== "") {
-                    result += "\n";
+            if (headers) {
+                for (let key of Object.keys(headers)) {
+                    const value = headers[key];
+                    if (result !== "") {
+                        result += "\n";
+                    }
+                    result += `${key}: ${value}`;
                 }
-                result += `${key}: ${value}`;
             }
             return result;
         }

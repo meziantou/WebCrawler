@@ -186,6 +186,11 @@ namespace WebCrawler.Site
                         ReferencedBy = document.ReferencedBy.Select(docRef => new ServiceDocumentRef(docRef)).ToList();
                     }
                 }
+
+                if (document.HtmlErrors != null)
+                {
+                    HtmlErrors = document.HtmlErrors.ToList();
+                }
             }
 
             public DateTime CrawledOn { get; }
@@ -200,6 +205,7 @@ namespace WebCrawler.Site
             public string FullErrorMessage { get; }
             public string ReasonPhrase { get; set; }
             public IList<ServiceDocumentRef> ReferencedBy { get; }
+            public IList<HtmlError> HtmlErrors { get; }
         }
 
         private class ServiceDocumentRef

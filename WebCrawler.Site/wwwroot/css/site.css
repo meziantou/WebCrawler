@@ -69,3 +69,8 @@ details .details > pre {
     margin-top: 0;
     margin-bottom: 0;
 }
+
+.code-error {
+    color: #d9534f;
+    font-weight: bold;
+}

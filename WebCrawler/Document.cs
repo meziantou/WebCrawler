@@ -23,6 +23,7 @@ namespace WebCrawler
         public string FullErrorMessage { get; set; }
         public string ReasonPhrase { get; set; }
         public string Language { get; set; }
+        public IList<HtmlError> HtmlErrors { get; } = new List<HtmlError>();
 
         public bool IsSame(Document document)
         {
