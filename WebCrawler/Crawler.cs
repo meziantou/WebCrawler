@@ -265,7 +265,7 @@ namespace WebCrawler
                             if (response.Headers.TryGetValues("Location", out var locationHeader))
                             {
                                 var location = locationHeader.FirstOrDefault();
-                                doc.RedirectUrl = new Url(new Url(doc.Url), location).Href;
+                                doc.RedirectUrl = GetAbsoluteUrl(new Url(doc.Url), location);
                                 EnqueueRedirect(doc, doc.RedirectUrl, ct);
                             }
                         }
@@ -359,7 +359,7 @@ namespace WebCrawler
                     {
                         if (string.IsNullOrEmpty(scriptElement.Type) || Utilities.IsJavaScriptMimeType(scriptElement.Type))
                         {
-                            var href = new Url(scriptElement.BaseUrl, scriptElement.Source).Href;
+                            var href = GetAbsoluteUrl(scriptElement.BaseUrl, scriptElement.Source);
                             Enqueue(document, href, node, ct);
                         }
                     }
@@ -471,8 +471,8 @@ namespace WebCrawler
                         var url = Utilities.ParseCssUrl(part);
                         if (url != null)
                         {
-                            var finalUrl = new Url(new Url(baseUrl ?? document.Url), url);
-                            Enqueue(document, finalUrl.Href, propertyRule, ct);
+                            var finalUrl = GetAbsoluteUrl(new Url(baseUrl ?? document.Url), url);
+                            Enqueue(document, finalUrl, propertyRule, ct);
                         }
                     }
                 }
@@ -499,14 +499,24 @@ namespace WebCrawler
 
         private void Enqueue(Document document, string url, IElement node, CancellationToken ct)
         {
-            var fullUrl = new Url(node.BaseUrl, url);
-            Enqueue(document, fullUrl.Href, null, GetExcerpt(node), ct);
+            var fullUrl = GetAbsoluteUrl(node.BaseUrl, url);
+            Enqueue(document, fullUrl, null, GetExcerpt(node), ct);
         }
 
         private void Enqueue(Document document, string url, string language, IElement node, CancellationToken ct)
         {
-            var fullUrl = new Url(node.BaseUrl, url);
-            Enqueue(document, fullUrl.Href, language, GetExcerpt(node), ct);
+            var fullUrl = GetAbsoluteUrl(node.BaseUrl, url);
+            Enqueue(document, fullUrl, language, GetExcerpt(node), ct);
+        }
+
+        private string GetAbsoluteUrl(Url baseUrl, string url)
+        {
+            var u = new Url(url);
+            if (u.IsAbsolute)
+                return u.Href;
+
+            var fullUrl = new Url(baseUrl, url);
+            return fullUrl.Href;
         }
 
         private void Enqueue(Document document, string url, ICssNode node, CancellationToken ct)
