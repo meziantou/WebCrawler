@@ -74,3 +74,7 @@ details .details > pre {
     color: #d9534f;
     font-weight: bold;
 }
+
+.document-url {
+    word-wrap: break-word;
+}

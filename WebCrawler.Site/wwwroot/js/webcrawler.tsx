@@ -330,7 +330,7 @@
                 result =
                     <div>
                         <div className="summary">
-                            <div><a href={document.url} target="_blank">{document.url}</a></div>
+                            <div><a className="document-url" href={document.url} target="_blank">{document.url}</a></div>
                             {document.redirectUrl && <div>➜ <a href={`#documentUrl=${encodeURIComponent(document.redirectUrl)}`}>{document.redirectUrl}</a></div>}
                             <div><span className={`tag tag-${this.getStatusCodeClass(document)}`}>{document.statusCode}</span> {document.reasonPhrase}</div>
                         </div>

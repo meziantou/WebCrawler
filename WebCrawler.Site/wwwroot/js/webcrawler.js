@@ -233,7 +233,7 @@ var WebCrawler;
                     JSX.createElement("div", null,
                         JSX.createElement("div", { className: "summary" },
                             JSX.createElement("div", null,
-                                JSX.createElement("a", { href: document.url, target: "_blank" }, document.url)),
+                                JSX.createElement("a", { className: "document-url", href: document.url, target: "_blank" }, document.url)),
                             document.redirectUrl && JSX.createElement("div", null,
                                 "\u279C ",
                                 JSX.createElement("a", { href: `#documentUrl=${encodeURIComponent(document.redirectUrl)}` }, document.redirectUrl)),
