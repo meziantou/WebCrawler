@@ -1,4 +1,6 @@
 ﻿namespace WebCrawler {
+    "use strict";
+
     interface Document {
         crawledOn: Date;
         language: string;
@@ -14,6 +16,7 @@
         referencedBy: DocumentRef[];
         references: DocumentRef[];
         htmlErrors: HtmlError[];
+        isRedirectionLoop?: boolean;
     }
 
     interface DocumentRef {
@@ -333,6 +336,7 @@
                             <div><a className="document-url" href={document.url} target="_blank">{document.url}</a></div>
                             {document.redirectUrl && <div>➜ <a href={`#documentUrl=${encodeURIComponent(document.redirectUrl)}`}>{document.redirectUrl}</a></div>}
                             <div><span className={`tag tag-${this.getStatusCodeClass(document)}`}>{document.statusCode}</span> {document.reasonPhrase}</div>
+                            {document.isRedirectionLoop && <div><i className="fa fa-refresh"></i> <a href={`#documentUrl=${encodeURIComponent(document.redirectUrl)}`}>{document.redirectUrl}</a></div>}
                         </div>
                         <details className={document.requestHeaders ? "" : "hide"}>
                             <summary>Request Headers</summary>
@@ -340,15 +344,12 @@
                                 <pre><code>{this.formatHeaders(document.requestHeaders)}</code></pre>
                             </div>
                         </details>
-
                         <details className={document.responseHeaders ? "" : "hide"}>
                             <summary>Response Headers</summary>
                             <div className="details">
                                 <pre><code>{this.formatHeaders(document.responseHeaders)}</code></pre>
                             </div>
                         </details>
-
-
                         <details>
                             <summary>References ({document.references.length})</summary>
                             <div className="details">
@@ -364,7 +365,6 @@
                                 </ul>
                             </div>
                         </details>
-
                         <details>
                             <summary>Referenced by ({document.referencedBy.length})</summary>
                             <div className="details">
@@ -380,7 +380,6 @@
                                 </ul>
                             </div>
                         </details>
-
                         <details className={document.htmlErrors.length > 0 ? "" : "hide"}>
                             <summary>HTML Errors ({document.htmlErrors.length})</summary>
                             <div className="details">
@@ -423,7 +422,11 @@
             }
 
             if (this.isStatusCodeRedirect(statusCode)) {
-                return "info";
+                if (document.isRedirectionLoop) {
+                    return "warning";
+                } else {
+                    return "info";
+                }
             }
 
             if (this.isStatusCodeError(statusCode)) {
@@ -483,6 +486,7 @@ namespace JSX {
         li: Partial<HTMLLIElement>;
         code: Partial<HTMLElement>;
         a: Partial<HTMLAnchorElement>;
+        i: Partial<HTMLElement>;
     }
 
     export interface Element extends HTMLElement {

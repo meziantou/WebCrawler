@@ -24,6 +24,8 @@ namespace WebCrawler
         public string ReasonPhrase { get; set; }
         public string Language { get; set; }
         public IList<HtmlError> HtmlErrors { get; } = new List<HtmlError>();
+        public bool? IsRedirectionLoop { get; set; }
+
 
         public bool IsSame(Document document)
         {
@@ -31,6 +33,28 @@ namespace WebCrawler
                 return false;
 
             return document.Url == Url && document.Language == Language;
+        }
+
+        public bool IsSelfOrInRedirections(string url)
+        {
+            if (Url == url)
+                return true;
+
+            foreach (var reference in ReferencedBy)
+            {
+                if (reference.SourceDocument.IsRedirection)
+                {
+                    if (reference.SourceDocument.IsSelfOrInRedirections(url))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        public bool IsRedirection
+        {
+            get { return (int)StatusCode >= 300 && (int)StatusCode < 400; }
         }
     }
 }

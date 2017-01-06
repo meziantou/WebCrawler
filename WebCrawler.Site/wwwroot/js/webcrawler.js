@@ -1,6 +1,7 @@
 "use strict";
 var WebCrawler;
 (function (WebCrawler) {
+    "use strict";
     class Crawler {
         constructor() {
             this.elements = {
@@ -240,7 +241,11 @@ var WebCrawler;
                             JSX.createElement("div", null,
                                 JSX.createElement("span", { className: `tag tag-${this.getStatusCodeClass(document)}` }, document.statusCode),
                                 " ",
-                                document.reasonPhrase)),
+                                document.reasonPhrase),
+                            document.isRedirectionLoop && JSX.createElement("div", null,
+                                JSX.createElement("i", { className: "fa fa-refresh" }),
+                                " ",
+                                JSX.createElement("a", { href: `#documentUrl=${encodeURIComponent(document.redirectUrl)}` }, document.redirectUrl))),
                         JSX.createElement("details", { className: document.requestHeaders ? "" : "hide" },
                             JSX.createElement("summary", null, "Request Headers"),
                             JSX.createElement("div", { className: "details" },
@@ -316,7 +321,12 @@ var WebCrawler;
                 return "success";
             }
             if (this.isStatusCodeRedirect(statusCode)) {
-                return "info";
+                if (document.isRedirectionLoop) {
+                    return "warning";
+                }
+                else {
+                    return "info";
+                }
             }
             if (this.isStatusCodeError(statusCode)) {
                 return "danger";

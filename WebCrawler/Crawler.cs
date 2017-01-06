@@ -536,6 +536,12 @@ namespace WebCrawler
             var parsedUrl = new Url(url);
             parsedUrl.Fragment = null;
 
+            if (document.IsSelfOrInRedirections(parsedUrl.Href))
+            {
+                document.IsRedirectionLoop = true;
+                return;
+            }
+
             var discoveredUrl = new DiscoveredUrl
             {
                 Url = parsedUrl.Href,
