@@ -78,3 +78,7 @@ details .details > pre {
 .document-url {
     word-wrap: break-word;
 }
+
+.document-language:before {
+    content: " ";
+}

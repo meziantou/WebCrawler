@@ -25,6 +25,8 @@
         sourceDocumentUrl: string;
         targetDocumentUrl: string;
         excerpt: string;
+
+        handled?: boolean;
     }
 
     interface HtmlError {
@@ -219,6 +221,10 @@
             }
 
             for (let reference of this.references) {
+                if (reference.handled) {
+                    continue;
+                }
+
                 const sourceDocument = this.documents.find(d => d.id === reference.sourceDocumentId);
                 if (sourceDocument) {
                     sourceDocument.references.push(reference);
@@ -227,6 +233,23 @@
                 const targetDocument = this.documents.find(d => d.id === reference.targetDocumentId);
                 if (targetDocument) {
                     targetDocument.referencedBy.push(reference);
+                }
+
+                reference.handled = true;
+            }
+
+            for (let document of this.documents) {
+                for (let reference of document.referencedBy) {
+                    if (reference.handled) {
+                        continue;
+                    }
+
+                    const sourceDocument = this.documents.find(d => d.id === reference.sourceDocumentId);
+                    if (sourceDocument) {
+                        sourceDocument.references.push(reference);
+                    }
+
+                    reference.handled = true;
                 }
             }
         }
@@ -326,14 +349,14 @@
                     <div className="document">
                         <a href={`#documentId=${document.id}`}>
                             <span className={`tag tag-${this.getStatusCodeClass(document)}`} title={document.reasonPhrase}>{document.statusCode}</span>
-                            <span title={document.url}>{document.url}</span>
+                            {this.renderDocumentUrl(document)}
                         </a>
                     </div>;
             } else {
                 result =
                     <div>
                         <div className="summary">
-                            <div><a className="document-url" href={document.url} target="_blank">{document.url}</a></div>
+                        <div><a className="document-url" href={document.url} target="_blank">{this.renderDocumentUrl(document)}</a></div>
                             {document.redirectUrl && <div>➜ <a href={`#documentUrl=${encodeURIComponent(document.redirectUrl)}`}>{document.redirectUrl}</a></div>}
                             <div><span className={`tag tag-${this.getStatusCodeClass(document)}`}>{document.statusCode}</span> {document.reasonPhrase}</div>
                             {document.isRedirectionLoop && <div><i className="fa fa-refresh"></i> <a href={`#documentUrl=${encodeURIComponent(document.redirectUrl)}`}>{document.redirectUrl}</a></div>}
@@ -399,6 +422,13 @@
             }
 
             return result;
+        }
+
+        private renderDocumentUrl(document: Document) {
+            return <span>
+                <span title={document.url}>{document.url}</span>
+                {document.language && <span className="document-language">({document.language})</span>}
+            </span>;
         }
 
         private getErrorExcerpt(error: HtmlError) {

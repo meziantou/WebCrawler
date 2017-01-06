@@ -138,6 +138,9 @@ var WebCrawler;
                 return;
             }
             for (let reference of this.references) {
+                if (reference.handled) {
+                    continue;
+                }
                 const sourceDocument = this.documents.find(d => d.id === reference.sourceDocumentId);
                 if (sourceDocument) {
                     sourceDocument.references.push(reference);
@@ -145,6 +148,19 @@ var WebCrawler;
                 const targetDocument = this.documents.find(d => d.id === reference.targetDocumentId);
                 if (targetDocument) {
                     targetDocument.referencedBy.push(reference);
+                }
+                reference.handled = true;
+            }
+            for (let document of this.documents) {
+                for (let reference of document.referencedBy) {
+                    if (reference.handled) {
+                        continue;
+                    }
+                    const sourceDocument = this.documents.find(d => d.id === reference.sourceDocumentId);
+                    if (sourceDocument) {
+                        sourceDocument.references.push(reference);
+                    }
+                    reference.handled = true;
                 }
             }
         }
@@ -227,14 +243,14 @@ var WebCrawler;
                     JSX.createElement("div", { className: "document" },
                         JSX.createElement("a", { href: `#documentId=${document.id}` },
                             JSX.createElement("span", { className: `tag tag-${this.getStatusCodeClass(document)}`, title: document.reasonPhrase }, document.statusCode),
-                            JSX.createElement("span", { title: document.url }, document.url)));
+                            this.renderDocumentUrl(document)));
             }
             else {
                 result =
                     JSX.createElement("div", null,
                         JSX.createElement("div", { className: "summary" },
                             JSX.createElement("div", null,
-                                JSX.createElement("a", { className: "document-url", href: document.url, target: "_blank" }, document.url)),
+                                JSX.createElement("a", { className: "document-url", href: document.url, target: "_blank" }, this.renderDocumentUrl(document))),
                             document.redirectUrl && JSX.createElement("div", null,
                                 "\u279C ",
                                 JSX.createElement("a", { href: `#documentUrl=${encodeURIComponent(document.redirectUrl)}` }, document.redirectUrl)),
@@ -299,6 +315,14 @@ var WebCrawler;
                                             JSX.createElement("code", null, this.getErrorExcerpt(htmlError))))))))));
             }
             return result;
+        }
+        renderDocumentUrl(document) {
+            return JSX.createElement("span", null,
+                JSX.createElement("span", { title: document.url }, document.url),
+                document.language && JSX.createElement("span", { className: "document-language" },
+                    "(",
+                    document.language,
+                    ")"));
         }
         getErrorExcerpt(error) {
             const excerptPosition = error.excerptPosition - 1;
