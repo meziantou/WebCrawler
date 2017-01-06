@@ -26,6 +26,7 @@ namespace WebCrawler
         public IList<HtmlError> HtmlErrors { get; } = new List<HtmlError>();
         public bool? IsRedirectionLoop { get; set; }
 
+        public bool IsRedirection => RedirectUrl != null;
 
         public bool IsSame(Document document)
         {
@@ -50,11 +51,6 @@ namespace WebCrawler
             }
 
             return false;
-        }
-
-        public bool IsRedirection
-        {
-            get { return (int)StatusCode >= 300 && (int)StatusCode < 400; }
         }
     }
 }

@@ -57,7 +57,7 @@ namespace WebCrawler
             };
 
             var retryHandler = new RetryDelegatingHandler(handler);
-            
+
 
             _client = new HttpClient(retryHandler, true);
             _client.DefaultRequestHeaders.CacheControl = new CacheControlHeaderValue { NoCache = true };
@@ -268,8 +268,7 @@ namespace WebCrawler
                             if (response.Headers.TryGetValues("Location", out var locationHeader))
                             {
                                 var location = locationHeader.FirstOrDefault();
-                                doc.RedirectUrl = GetAbsoluteUrl(new Url(doc.Url), location);
-                                EnqueueRedirect(doc, doc.RedirectUrl, ct);
+                                EnqueueRedirect(doc, GetAbsoluteUrl(new Url(doc.Url), location), ct);
                             }
                         }
                         else
@@ -350,6 +349,32 @@ namespace WebCrawler
 
         private void GatherUrls(Document document, IDocument htmlDocument, CancellationToken ct)
         {
+            /* <meta http-equiv="refresh" content="0; url=http://example.com/" /> */
+            if (htmlDocument.Head != null)
+            {
+                var metas = htmlDocument.Head.GetElementsByTagName("meta").OfType<IHtmlMetaElement>();
+                foreach (var meta in metas)
+                {
+                    if (string.Equals("refresh", meta.HttpEquivalent, StringComparison.OrdinalIgnoreCase) && meta.Content != null)
+                    {
+                        var content = meta.Content;
+                        var parts = content.Split(';');
+                        foreach (var part in parts)
+                        {
+                            var value = part.Trim();
+
+                            const string urlPrefix = "url=";
+                            if (value.StartsWith(urlPrefix))
+                            {
+                                var url = GetAbsoluteUrl(meta.BaseUrl, value.Substring(urlPrefix.Length));
+                                EnqueueRedirect(document, meta, url, ct);
+                                return; // Do not parse page content    
+                            }
+                        }
+                    }
+                }
+            }
+
             foreach (var node in htmlDocument.All)
             {
                 if (node is IHtmlAnchorElement anchorElement)
@@ -527,7 +552,7 @@ namespace WebCrawler
             Enqueue(document, url, null, GetExcerpt(node), ct);
         }
 
-        private void EnqueueRedirect(Document document, string url, CancellationToken ct)
+        private void EnqueueRedirect(Document document, IElement node, string url, CancellationToken ct)
         {
             if (!MustEnqueueUrl(url))
                 return;
@@ -536,7 +561,10 @@ namespace WebCrawler
             var parsedUrl = new Url(url);
             parsedUrl.Fragment = null;
 
-            if (document.IsSelfOrInRedirections(parsedUrl.Href))
+            var redirectUrl = parsedUrl.Href;
+            document.RedirectUrl = redirectUrl;
+
+            if (document.IsSelfOrInRedirections(redirectUrl))
             {
                 document.IsRedirectionLoop = true;
                 return;
@@ -544,12 +572,18 @@ namespace WebCrawler
 
             var discoveredUrl = new DiscoveredUrl
             {
-                Url = parsedUrl.Href,
+                Url = redirectUrl,
                 SourceDocument = document,
-                IsRedirect = true
+                IsRedirect = true,
+                Excerpt = GetExcerpt(node)
             };
 
             _discoveredUrls.Add(discoveredUrl, ct);
+        }
+
+        private void EnqueueRedirect(Document document, string url, CancellationToken ct)
+        {
+            EnqueueRedirect(document, null, url, ct);
         }
 
         private bool MustEnqueueUrl(string url)
