@@ -11,6 +11,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json.Serialization;
+using WebCrawler.Analysers;
+using WebCrawler.Analysers.Css;
+using WebCrawler.Analysers.Documents;
 
 namespace WebCrawler.Site
 {
@@ -47,6 +50,8 @@ namespace WebCrawler.Site
             }
 
             var options = new CrawlerOptions();
+            options.Analysers.Add(new StrictTransportSecurityAnalyser());
+
             if (!string.IsNullOrWhiteSpace(data.UrlIncludePatterns))
             {
                 using (var reader = new StringReader(data.UrlIncludePatterns))
@@ -191,6 +196,11 @@ namespace WebCrawler.Site
                 {
                     HtmlErrors = document.HtmlErrors.ToList();
                 }
+
+                if (document.Analysers != null)
+                {
+                    Analysers = document.Analysers.ToList();
+                }
             }
 
             public DateTime CrawledOn { get; }
@@ -206,6 +216,7 @@ namespace WebCrawler.Site
             public string ReasonPhrase { get; set; }
             public IList<ServiceDocumentRef> ReferencedBy { get; }
             public IList<HtmlError> HtmlErrors { get; }
+            public IList<AnalyserResultItem> Analysers { get; }
         }
 
         private class ServiceDocumentRef

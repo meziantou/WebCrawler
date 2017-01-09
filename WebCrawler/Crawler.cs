@@ -14,6 +14,7 @@ using AngleSharp.Dom.Events;
 using AngleSharp.Dom.Html;
 using AngleSharp.Extensions;
 using AngleSharp.Parser.Css;
+using WebCrawler.Analysers;
 
 namespace WebCrawler
 {
@@ -199,11 +200,7 @@ namespace WebCrawler
                 existingDocument = result.Documents.FirstOrDefault(d => doc.IsSame(d)); // Another thread as processed the same URL at the same time
                 if (existingDocument != null)
                 {
-                    if (!discoveredUrl.IsRedirect)
-                    {
-                        AddReference(discoveredUrl, existingDocument);
-                    }
-
+                    AddReference(discoveredUrl, existingDocument);
                     return;
                 }
             }
@@ -278,11 +275,26 @@ namespace WebCrawler
                                 var contentType = response.Content?.Headers.ContentType?.MediaType;
                                 if (contentType == null || Utilities.IsHtmlMimeType(contentType))
                                 {
-                                    await HandleHtmlAsync(doc, response, ct).ConfigureAwait(false);
+                                    var htmlDocument = await HandleHtmlAsync(doc, response, ct).ConfigureAwait(false);
+
+                                    foreach (var analyser in _options.Analysers.OfType<IHtmlAnalyser>())
+                                    {
+                                        AddAnalyserResult(doc, analyser.Analyse(new HtmlAnalyseArgs(doc, htmlDocument)));
+                                    }
                                 }
                                 else if (Utilities.IsCssMimeType(contentType))
                                 {
-                                    await HandleCssAsync(doc, response, ct).ConfigureAwait(false);
+                                    var stylesheet = await HandleCssAsync(doc, response, ct).ConfigureAwait(false);
+
+                                    foreach (var analyser in _options.Analysers.OfType<ICssAnalyser>())
+                                    {
+                                        AddAnalyserResult(doc, analyser.Analyse(new CssAnalyseArgs(doc, stylesheet)));
+                                    }
+                                }
+
+                                foreach (var analyser in _options.Analysers.OfType<IDocumentAnalyser>())
+                                {
+                                    AddAnalyserResult(doc, analyser.Analyse(new AnalyseArgs(doc)));
                                 }
                             }
                         }
@@ -298,6 +310,14 @@ namespace WebCrawler
             return doc;
         }
 
+        private void AddAnalyserResult(Document document, IEnumerable<AnalyserResultItem> items)
+        {
+            foreach (var item in items)
+            {
+                document.Analysers.Add(item);
+            }
+        }
+
         public string GetErrorMessage(Exception ex)
         {
             string message = ex.Message;
@@ -311,7 +331,7 @@ namespace WebCrawler
             return s;
         }
 
-        private async Task HandleHtmlAsync(Document document, HttpResponseMessage response, CancellationToken ct)
+        private async Task<IDocument> HandleHtmlAsync(Document document, HttpResponseMessage response, CancellationToken ct)
         {
             var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
@@ -345,6 +365,8 @@ namespace WebCrawler
 
             document.Title = htmlDocument.Title;
             GatherUrls(document, htmlDocument, ct);
+
+            return htmlDocument;
         }
 
         private void GatherUrls(Document document, IDocument htmlDocument, CancellationToken ct)
@@ -461,17 +483,30 @@ namespace WebCrawler
             }
         }
 
-        private async Task HandleCssAsync(Document document, HttpResponseMessage response, CancellationToken ct)
+        private CssParserOptions CreateCssParserOptions()
+        {
+            var options = new CssParserOptions();
+            options.IsIncludingUnknownDeclarations = true;
+            options.IsIncludingUnknownRules = true;
+            options.IsStoringTrivia = true;
+            options.IsToleratingInvalidConstraints = true;
+            options.IsToleratingInvalidSelectors = true;
+            options.IsToleratingInvalidValues = true;
+            return options;
+        }
+
+        private async Task<ICssStyleSheet> HandleCssAsync(Document document, HttpResponseMessage response, CancellationToken ct)
         {
             var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            var cssParser = new CssParser();
+            var cssParser = new CssParser(CreateCssParserOptions());
             var stylesheet = cssParser.ParseStylesheet(content);
             HandleCss(document, null, stylesheet, ct);
+            return stylesheet;
         }
 
         private void HandleCss(Document document, string baseUrl, string css, CancellationToken ct)
         {
-            var cssParser = new CssParser();
+            var cssParser = new CssParser(CreateCssParserOptions());
             var stylesheet = cssParser.ParseStylesheet(css);
             HandleCss(document, baseUrl, stylesheet, ct);
         }

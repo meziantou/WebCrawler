@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using WebCrawler.Analysers;
 
 namespace WebCrawler
 {
@@ -24,6 +25,7 @@ namespace WebCrawler
         public string ReasonPhrase { get; set; }
         public string Language { get; set; }
         public IList<HtmlError> HtmlErrors { get; } = new List<HtmlError>();
+        public IList<AnalyserResultItem> Analysers { get; } = new List<AnalyserResultItem>();
         public bool? IsRedirectionLoop { get; set; }
 
         public bool IsRedirection => RedirectUrl != null;

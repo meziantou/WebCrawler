@@ -312,9 +312,53 @@ var WebCrawler;
                                             ": ",
                                             htmlError.message),
                                         JSX.createElement("pre", null,
-                                            JSX.createElement("code", null, this.getErrorExcerpt(htmlError))))))))));
+                                            JSX.createElement("code", null, this.getErrorExcerpt(htmlError))))))))),
+                        JSX.createElement("details", { className: document.analysers.length > 0 ? "" : "hide" },
+                            JSX.createElement("summary", null,
+                                "Analysers (",
+                                document.analysers.length,
+                                ")"),
+                            JSX.createElement("div", { className: "details" },
+                                JSX.createElement("ul", null, this.renderAnalyserResult(document)))));
             }
             return result;
+        }
+        renderAnalyserResult(document) {
+            const groups = groupBy(document.analysers, analyser => analyser.category);
+            const sortedGroups = Array.from(groups).map(item => { return { key: item[0], items: item[1] }; });
+            sortedGroups.sort((a, b) => compareString(a.key, b.key));
+            return sortedGroups.map(group => JSX.createElement("li", null,
+                JSX.createElement("details", null,
+                    JSX.createElement("summary", null,
+                        group.key,
+                        " (",
+                        group.items.length,
+                        ")"),
+                    JSX.createElement("div", { className: "details" },
+                        JSX.createElement("ul", null, group.items.map(item => JSX.createElement("details", null,
+                            JSX.createElement("summary", null,
+                                this.renderAnalyserItemTag(item),
+                                " ",
+                                item.message),
+                            JSX.createElement("div", { className: "details" },
+                                item.fullMessage && JSX.createElement("div", null, item.fullMessage),
+                                item.excerpt && JSX.createElement("pre", null,
+                                    JSX.createElement("code", null, item.excerpt)),
+                                item.documentationUrl && JSX.createElement("div", null,
+                                    JSX.createElement("a", { href: item.documentationUrl, target: "_blank" }, item.documentationUrl))))))))));
+        }
+        renderAnalyserItemTag(analyserItem) {
+            switch (analyserItem.type) {
+                case 0 /* Info */:
+                    return JSX.createElement("span", { className: "tag tag-info" }, "Info");
+                case 1 /* Good */:
+                    return JSX.createElement("span", { className: "tag tag-success" }, "Ok");
+                case 2 /* Warning */:
+                    return JSX.createElement("span", { className: "tag tag-warning" }, "Warning");
+                case 3 /* Danger */:
+                    return JSX.createElement("span", { className: "tag tag-danger" }, "Danger");
+            }
+            return null;
         }
         renderDocumentUrl(document) {
             return JSX.createElement("span", null,
@@ -381,6 +425,31 @@ var WebCrawler;
         }
     }
     WebCrawler.Crawler = Crawler;
+    function compareString(a, b) {
+        if (a < b) {
+            return -1;
+        }
+        else if (a > b) {
+            return 1;
+        }
+        else {
+            return 0;
+        }
+    }
+    function groupBy(array, keySelector) {
+        const map = new Map();
+        for (const item of array) {
+            const key = keySelector(item);
+            let values = map.get(key);
+            if (!Array.isArray(values)) {
+                values = [];
+                map.set(key, values);
+            }
+            values.push(item);
+        }
+        return map;
+    }
+    ;
 })(WebCrawler || (WebCrawler = {}));
 var JSX;
 (function (JSX) {

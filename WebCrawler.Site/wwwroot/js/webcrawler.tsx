@@ -16,6 +16,7 @@
         referencedBy: DocumentRef[];
         references: DocumentRef[];
         htmlErrors: HtmlError[];
+        analysers: AnalyserItem[];
         isRedirectionLoop?: boolean;
     }
 
@@ -37,6 +38,24 @@
         column: number;
         message: string;
         code: number;
+    }
+
+    interface AnalyserItem {
+        type: AnalyserItemType,
+        message: string;
+        fullMessage: string;
+        category: string;
+        line: number;
+        column: number;
+        excerpt: string;
+        documentationUrl: string;
+    }
+
+    const enum AnalyserItemType {
+        Info,
+        Good,
+        Warning,
+        Danger
     }
 
     interface SocketMessage {
@@ -356,7 +375,7 @@
                 result =
                     <div>
                         <div className="summary">
-                        <div><a className="document-url" href={document.url} target="_blank">{this.renderDocumentUrl(document)}</a></div>
+                            <div><a className="document-url" href={document.url} target="_blank">{this.renderDocumentUrl(document)}</a></div>
                             {document.redirectUrl && <div>➜ <a href={`#documentUrl=${encodeURIComponent(document.redirectUrl)}`}>{document.redirectUrl}</a></div>}
                             <div><span className={`tag tag-${this.getStatusCodeClass(document)}`}>{document.statusCode}</span> {document.reasonPhrase}</div>
                             {document.isRedirectionLoop && <div><i className="fa fa-refresh"></i> <a href={`#documentUrl=${encodeURIComponent(document.redirectUrl)}`}>{document.redirectUrl}</a></div>}
@@ -418,10 +437,64 @@
                                 </ul>
                             </div>
                         </details>
+                        <details className={document.analysers.length > 0 ? "" : "hide"}>
+                            <summary>Analysers ({document.analysers.length})</summary>
+                            <div className="details">
+                                <ul>
+                                    {this.renderAnalyserResult(document)}
+                                </ul>
+                            </div>
+                        </details>
                     </div>;
             }
 
             return result;
+        }
+
+        private renderAnalyserResult(document: Document): JSX.Element[] {
+            const groups = groupBy(document.analysers, analyser => analyser.category);
+            const sortedGroups = Array.from(groups).map(item => { return { key: item[0], items: item[1] }; });
+            sortedGroups.sort((a, b) => compareString(a.key, b.key));
+
+            return sortedGroups.map(group =>
+                <li>
+                    <details>
+                        <summary>{group.key} ({group.items.length})</summary>
+                        <div className="details">
+                            <ul>
+                                {group.items.map(item =>
+                                    <details>
+                                        <summary>{this.renderAnalyserItemTag(item)} {item.message}</summary>
+                                        <div className="details">
+                                            {item.fullMessage && <div>{item.fullMessage}</div>}
+                                            {item.excerpt && <pre><code>{item.excerpt}</code></pre>}
+                                            {item.documentationUrl && <div><a href={item.documentationUrl} target="_blank">{item.documentationUrl}</a></div>}
+                                        </div>
+                                    </details>
+                                )}
+                            </ul>
+                        </div>
+                    </details>
+                </li>
+            );
+        }
+
+        private renderAnalyserItemTag(analyserItem: AnalyserItem): JSX.Element | null {
+            switch (analyserItem.type) {
+                case AnalyserItemType.Info:
+                    return <span className="tag tag-info">Info</span>;
+
+                case AnalyserItemType.Good:
+                    return <span className="tag tag-success">Ok</span>;
+
+                case AnalyserItemType.Warning:
+                    return <span className="tag tag-warning">Warning</span>;
+
+                case AnalyserItemType.Danger:
+                    return <span className="tag tag-danger">Danger</span>;
+            }
+
+            return null;
         }
 
         private renderDocumentUrl(document: Document) {
@@ -436,6 +509,7 @@
             const before = this.replaceNewLines(error.excerpt.substring(0, excerptPosition));
             const current = this.replaceNewLines(error.excerpt.substring(excerptPosition, excerptPosition + 1));
             const after = this.replaceNewLines(error.excerpt.substring(excerptPosition + 1));
+
             return <span>{before}<span className="code-error">{current}</span>{after}</span>;
         }
 
@@ -496,6 +570,34 @@
             return result;
         }
     }
+
+    function compareString(a: string, b: string) {
+        if (a < b) {
+            return -1;
+        } else if (a > b) {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+
+    function groupBy<T, TKey>(array: T[], keySelector: (item: T) => TKey) {
+        const map = new Map<TKey, T[]>();
+
+        for (const item of array) {
+            const key = keySelector(item);
+            let values = map.get(key);
+
+            if (!Array.isArray(values)) {
+                values = [];
+                map.set(key, values);
+            }
+
+            values.push(item);
+        }
+
+        return map;
+    };
 }
 
 namespace JSX {
