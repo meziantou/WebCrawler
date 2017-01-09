@@ -14,6 +14,7 @@ using Newtonsoft.Json.Serialization;
 using WebCrawler.Analysers;
 using WebCrawler.Analysers.Css;
 using WebCrawler.Analysers.Documents;
+using WebCrawler.Analysers.Html;
 
 namespace WebCrawler.Site
 {
@@ -51,6 +52,11 @@ namespace WebCrawler.Site
 
             var options = new CrawlerOptions();
             options.Analysers.Add(new StrictTransportSecurityAnalyser());
+
+            options.Analysers.Add(new EmptyRuleAnalyser());
+
+            options.Analysers.Add(new CommentAnalyser());
+            options.Analysers.Add(new ImageAltAttributeAnalyser());
 
             if (!string.IsNullOrWhiteSpace(data.UrlIncludePatterns))
             {

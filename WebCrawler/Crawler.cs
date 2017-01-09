@@ -281,6 +281,36 @@ namespace WebCrawler
                                     {
                                         AddAnalyserResult(doc, analyser.Analyse(new HtmlAnalyseArgs(doc, htmlDocument)));
                                     }
+
+                                    var htmlStyleTagAnalysers = _options.Analysers.OfType<ICssAnalyser>().Where(analyser => (analyser.Targets & CssAnalyserTargets.HtmlStyleTag) == CssAnalyserTargets.HtmlStyleTag).ToList();
+                                    if (htmlStyleTagAnalysers.Any())
+                                    {
+                                        var elements = htmlDocument.QuerySelectorAll<IHtmlStyleElement>("style").ToList();
+                                        foreach (var analyser in htmlStyleTagAnalysers)
+                                        {
+                                            foreach (var element in elements)
+                                            {
+                                                AddAnalyserResult(doc, analyser.Analyse(new CssAnalyseArgs(doc, CssAnalyserTargets.HtmlStyleTag, ParseCss(element.InnerHtml), element)));
+                                            }
+                                        }
+                                    }
+
+                                    var htmlStyleAttributeAnalysers = _options.Analysers.OfType<ICssAnalyser>().Where(analyser => (analyser.Targets & CssAnalyserTargets.HtmlStyleAttribute) == CssAnalyserTargets.HtmlStyleAttribute).ToList();
+                                    if (htmlStyleAttributeAnalysers.Any())
+                                    {
+                                        var elements = htmlDocument.QuerySelectorAll("*[style]").ToList();
+                                        foreach (var analyser in htmlStyleAttributeAnalysers)
+                                        {
+                                            foreach (var element in elements)
+                                            {
+                                                var style = element.GetAttribute("style");
+                                                var rule = CreateCssRuleFromInlineStyle(style);
+                                                AddAnalyserResult(doc, analyser.Analyse(new CssAnalyseArgs(doc, CssAnalyserTargets.HtmlStyleAttribute, ParseCss(rule), element)));
+                                            }
+                                        }
+                                    }
+
+
                                 }
                                 else if (Utilities.IsCssMimeType(contentType))
                                 {
@@ -288,7 +318,7 @@ namespace WebCrawler
 
                                     foreach (var analyser in _options.Analysers.OfType<ICssAnalyser>())
                                     {
-                                        AddAnalyserResult(doc, analyser.Analyse(new CssAnalyseArgs(doc, stylesheet)));
+                                        AddAnalyserResult(doc, analyser.Analyse(new CssAnalyseArgs(doc, CssAnalyserTargets.StyleSheet, stylesheet)));
                                     }
                                 }
 
@@ -478,9 +508,14 @@ namespace WebCrawler
                 var style = node.GetAttribute("style");
                 if (!string.IsNullOrWhiteSpace(style))
                 {
-                    HandleCss(document, node.BaseUri, "dummy{" + style + "}", ct);
+                    HandleCss(document, node.BaseUri, CreateCssRuleFromInlineStyle(style), ct);
                 }
             }
+        }
+
+        private string CreateCssRuleFromInlineStyle(string style)
+        {
+            return "webcrawler_generated_rule{" + style + "}";
         }
 
         private CssParserOptions CreateCssParserOptions()
@@ -506,9 +541,15 @@ namespace WebCrawler
 
         private void HandleCss(Document document, string baseUrl, string css, CancellationToken ct)
         {
+            var stylesheet = ParseCss(css);
+            HandleCss(document, baseUrl, stylesheet, ct);
+        }
+
+        private ICssStyleSheet ParseCss(string css)
+        {
             var cssParser = new CssParser(CreateCssParserOptions());
             var stylesheet = cssParser.ParseStylesheet(css);
-            HandleCss(document, baseUrl, stylesheet, ct);
+            return stylesheet;
         }
 
         private void HandleCss(Document document, string baseUrl, ICssNode node, CancellationToken ct)

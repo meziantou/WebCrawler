@@ -5,7 +5,6 @@ namespace WebCrawler.Analysers.Documents
 {
     public class StrictTransportSecurityAnalyser : IDocumentAnalyser
     {
-        private const string CategoryName = "Security";
         private const string DocumentationUrl = "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security";
 
         private bool IsHttps(Document document)
@@ -33,7 +32,7 @@ namespace WebCrawler.Analysers.Documents
                 {
                     yield return new AnalyserResultItem()
                     {
-                        Category = CategoryName,
+                        Category = Categories.Security,
                         Type = AnalyserResultType.Warning,
                         Message = "Strict-Transport-Security header not found",
                         DocumentationUrl = DocumentationUrl
@@ -43,7 +42,7 @@ namespace WebCrawler.Analysers.Documents
                 {
                     yield return new AnalyserResultItem()
                     {
-                        Category = CategoryName,
+                        Category = Categories.Security,
                         Type = AnalyserResultType.Good,
                         Message = "Strict-Transport-Security header found",
                         FullMessage = header,
