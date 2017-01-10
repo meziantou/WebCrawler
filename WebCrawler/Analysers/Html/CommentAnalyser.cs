@@ -10,10 +10,13 @@ namespace WebCrawler.Analysers.Html
         public IEnumerable<AnalyserResultItem> Analyse(HtmlAnalyseArgs args)
         {
             var document = args.HtmlDocument;
-            var iterator = document.CreateNodeIterator(document.DocumentElement, FilterSettings.Comment);
+            var iterator = document.CreateNodeIterator(document);
             INode node;
             while ((node = iterator.Next()) != null)
             {
+                if (node.NodeType != NodeType.Comment)
+                    continue;
+
                 if (node.TextContent.StartsWith("[if ", StringComparison.OrdinalIgnoreCase))
                 {
                     // Conditional comments should be removed?
