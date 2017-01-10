@@ -17,6 +17,9 @@ namespace WebCrawler.Analysers.Css
             var rules = node.GetAll<ICssStyleSheet>().SelectMany(styleSheet => styleSheet.Rules);
             foreach (var rule in rules)
             {
+                if (rule.Type == CssRuleType.Unknown)
+                    continue;
+
                 if (hashSet.Add(rule))
                 {
                     if (!rule.GetAll<ICssProperty>().Any())
@@ -29,6 +32,9 @@ namespace WebCrawler.Analysers.Css
             var groups = node.GetAll<ICssGroupingRule>();
             foreach (var group in groups)
             {
+                if (group.Type == CssRuleType.Unknown)
+                    continue;
+
                 if (hashSet.Add(group))
                 {
                     if (!group.Rules.Any())
