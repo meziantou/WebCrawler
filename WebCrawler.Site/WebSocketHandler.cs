@@ -57,6 +57,7 @@ namespace WebCrawler.Site
 
             options.Analysers.Add(new CommentAnalyser());
             options.Analysers.Add(new ImageAltAttributeAnalyser());
+            options.Analysers.Add(new SeoMetaAnalyser());
 
             if (!string.IsNullOrWhiteSpace(data.UrlIncludePatterns))
             {
