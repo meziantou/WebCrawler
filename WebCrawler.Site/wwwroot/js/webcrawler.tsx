@@ -330,6 +330,11 @@
                 this.elements.documentDetails.appendChild(element);
 
                 this.elements.documentDetailsContainer.classList.remove("hide");
+
+                this.elements.documentDetailsContainer.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                });
             }
         }
 

@@ -213,6 +213,10 @@ var WebCrawler;
                 const element = this.renderDocument(document, "details");
                 this.elements.documentDetails.appendChild(element);
                 this.elements.documentDetailsContainer.classList.remove("hide");
+                this.elements.documentDetailsContainer.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                });
             }
         }
         setButtonVisibility() {
