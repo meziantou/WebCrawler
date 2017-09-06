@@ -1,16 +1,16 @@
-﻿using System;
+﻿using System.Threading.Tasks;
 using WebCrawler;
 
 class Program
 {
-    static void Main(string[] args)
+    async static Task Main(string[] args)
     {
         if (args.Length == 0)
             return;
 
         using (Crawler crawler = new Crawler())
         {
-            var result = crawler.RunAsync(args[0]).Result;
+            var result = await crawler.RunAsync(args[0]);
         }
     }
 }

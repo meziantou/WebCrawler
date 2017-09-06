@@ -495,4 +495,17 @@ var JSX;
         }
     }
 })(JSX || (JSX = {}));
+//declare class URLSearchParams {
+//    constructor(url?: string);
+//    append(name: string, value: any): void;
+//    set(name: string, value: any): void;
+//    delete(name: string): void;
+//    has(name: string): boolean;
+//    get(name: string): string;
+//    getAll(name: string): string[];
+//    entries(): Iterable<string[]>;
+//    keys(): Iterable<string>;
+//    values(): Iterable<string>;
+//    toString(): string;
+//} 
 //# sourceMappingURL=webcrawler.js.map
