@@ -36,6 +36,6 @@ You can deploy the website on Azure for free:
 ## Blog posts
 
 Some parts of the code are explained in blog posts:
-- [Easily generate dynamic html using TSX](http://www.softfluent.com/blog/dev/2016/12/15/Easily-generate-dynamic-html-using-TSX)
-- [Using Web Sockets with ASP.NET Core](http://www.softfluent.com/blog/dev/2016/12/11/Using-Web-Sockets-with-ASP-NET-Core)
-- [Using Let’s encrypt with ASP.NET Core](http://www.softfluent.com/blog/dev/2016/11/09/Using-Let-s-encrypt-with-ASP-NET-Core)
+- [Write your own DOM element factory for TypeScript](https://www.meziantou.net/write-your-own-dom-element-factory-for-typescript.htm)
+- [Using Web Sockets with ASP.NET Core](https://www.meziantou.net/using-web-sockets-with-asp-net-core.htm)
+- [Using Let’s encrypt with ASP.NET Core](https://www.meziantou.net/using-let-s-encrypt-with-asp-net-core.htm)
