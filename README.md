@@ -25,6 +25,8 @@ For HTML files, URLs are extracted from:
 For CSS files, URLs are extracted from:
 - `rule: url(...)`
 
+![Web Crawler](img/WebCrawler.png)
+
 ## How to deploy on Azure (free)
 
 You can deploy the website on Azure for free:
